@@ -53,7 +53,14 @@ selling trading group — fork it, tune the thresholds, and make it yours.
 
 ## How to Use
 
-1. **Install** (macOS): `./setup.sh` — installs whisper-cpp and sox via Homebrew, downloads the
+0. **Prerequisites** — macOS with [Homebrew](https://brew.sh) and Python 3.10+. If
+   `brew --version` fails, install Homebrew first (asks for your Mac password):
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+   then follow the installer's printed "Next steps" to add `brew` to your PATH
+   (on Apple Silicon: `eval "$(/opt/homebrew/bin/brew shellenv)"`).
+1. **Install**: `./setup.sh` — installs whisper-cpp and sox via Homebrew, downloads the
    ~141 MB Whisper model, and creates your local `config.json` and `.env`.
 2. **Practice free** — `python3 src/server.py --mock` → open http://127.0.0.1:8765. Try the mock
    symbols: `CHEP` (0.4¢ → asks), `WARN` (12¢ → asks with warning), `EXPN` (35¢ → auto-rejects).
@@ -67,6 +74,13 @@ selling trading group — fork it, tune the thresholds, and make it yours.
 5. **Trade day** — edit `watchlist.txt` with the day's candidates, start the server, and quote
    by voice, hotkey, or the typed command box (`locate 500 FRSX`). Unused shares:
    *"sell back 100 FRSX"*.
+6. **Second screen / another Mac** (optional) — start with `--lan`
+   (`python3 src/server.py --lan`) and open `http://<trading-mac-name>.local:8765` from any
+   device on your network (find the name under System Settings → General → Sharing). Approve
+   the macOS firewall prompt on first run. **The mic and spoken read-back stay on the server
+   Mac** — remote devices are remote controls/monitors. ⚠ LAN mode means anyone on the
+   network can reach the console, including accept — use only on a trusted home network
+   (default remains localhost-only). Port busy? Add `--port 8766`.
 
 ## Data Sources
 
