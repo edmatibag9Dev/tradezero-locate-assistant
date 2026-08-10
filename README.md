@@ -82,6 +82,12 @@ selling trading group — fork it, tune the thresholds, and make it yours.
    Mac** — remote devices are remote controls/monitors. ⚠ LAN mode means anyone on the
    network can reach the console, including accept — use only on a trusted home network
    (default remains localhost-only). Port busy? Add `--port 8766`.
+7. **Auto-start at login** (optional, recommended for a dedicated trading Mac) —
+   `./install-autostart.sh --lan` installs a launchd LaunchAgent: the console starts at
+   login, restarts if it crashes, and survives closed terminals. Any server flags you pass
+   are baked in. `--status` checks it, `--uninstall` removes it; output goes to
+   `logs/console.log`. If the mic fails silently afterward, grant Microphone access to
+   `python3`/`Python` in System Settings → Privacy & Security.
 
 ## Data Sources
 

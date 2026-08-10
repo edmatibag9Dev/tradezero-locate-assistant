@@ -25,6 +25,7 @@ locates REST API → rule gate → spoken/web read-back, with every quote logged
 | `SPEC-locate-workflow.md` | yes | TradeZero locate API contract + log schema + rule bands. |
 | `CHANGELOG.md` | yes | Keep-a-Changelog history. |
 | `setup.sh` | yes | One-time install: brew deps, Whisper model, local config. |
+| `install-autostart.sh` | yes | launchd LaunchAgent installer (start at login, restart on crash). |
 | `config.example.json` | yes | Config template (rules, polling, mode). |
 | `.env.example` | yes | API key env-var template. |
 | `watchlist.txt` | yes | Tickers prioritized by voice recognition; edit daily. |

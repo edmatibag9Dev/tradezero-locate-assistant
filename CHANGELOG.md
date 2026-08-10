@@ -5,6 +5,18 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.2.0] — 2026-08-10
+
+### Added
+- `install-autostart.sh`: launchd LaunchAgent installer — console starts at login,
+  auto-restarts on crash (KeepAlive verified), survives closed terminals; `--status` and
+  `--uninstall` included; server flags (e.g. `--lan`) baked into the job; logs to
+  `logs/console.log`.
+
+### Fixed
+- Python 3.9 compatibility (`from __future__ import annotations` across `src/`) — the
+  macOS built-in python3 now works; README prerequisite corrected to 3.9+.
+
 ## [1.1.0] — 2026-08-10
 
 ### Added
