@@ -1,0 +1,19 @@
+{
+  "base_url": "https://webapi.tradezero.com",
+  "account_id": "SET_ME",
+  "mode": "mock",
+
+  "rules": {
+    "auto_reject_at_per_share": 0.20,
+    "warn_at_per_share": 0.10
+  },
+
+  "polling": {
+    "initial_wait_s": 2,
+    "interval_s": 2,
+    "max_attempts": 4
+  },
+
+  "speak": true,
+  "log_file": "logs/quotes.jsonl"
+}

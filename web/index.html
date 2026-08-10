@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Locate Console</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --brand: #2C7A6B; --brand-600: #1F6457; --brand-700: #184F46; --brand-50: #EAF4F1;
+    --navy: #2B4C7E; --navy-600: #213C66;
+    --bg: #FFFFFF; --surface: #FFFFFF; --raised: #F7F9F9; --border: #DDE3E3;
+    --text: #0B0F0F; --muted: #6B7777;
+    --up: #15803D; --up-bg: #E9F7EF; --down: #B91C1C; --down-bg: #FBEAEA;
+    --warn-text: #B45309; --warn-bg: #FBF3E3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --brand: #5BAE9E; --brand-600: #5BAE9E; --brand-700: #75B3A6; --brand-50: #133E37;
+      --navy: #7FA6D6; --navy-600: #7FA6D6;
+      --bg: #0F1414; --surface: #161D1C; --raised: #1E2726; --border: #2A3433;
+      --text: #ECF1F0; --muted: #97A3A3;
+      --up: #2E9E5B; --up-bg: #133E27; --down: #D64545; --down-bg: #3E1414;
+      --warn-text: #E0A33E; --warn-bg: #3A2C10;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text);
+         font: 16px/1.5 Inter, system-ui, sans-serif; padding: 24px; }
+  h1 { font-family: Fraunces, serif; font-weight: 900; font-size: 28px; }
+  h2 { font-family: Fraunces, serif; font-weight: 600; font-size: 18px;
+       color: var(--navy-600); margin-bottom: 10px; }
+  .num, td.num, .rate { font-family: "IBM Plex Mono", monospace; }
+  header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+  .mode { font: 600 12px Inter; letter-spacing: .08em; text-transform: uppercase;
+          padding: 3px 10px; border-radius: 999px; }
+  .mode.mock { background: var(--warn-bg); color: var(--warn-text); }
+  .mode.real { background: var(--brand-50); color: var(--brand-600); }
+  .rules-note { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .grid { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 12px; padding: 18px; margin-bottom: 20px; }
+
+  #talk { width: 100%; padding: 22px; font: 700 18px Inter; color: #fff;
+          background: var(--brand); border: 0; border-radius: 12px; cursor: pointer; }
+  #talk:hover { background: var(--brand-600); }
+  #talk:disabled { opacity: .55; cursor: wait; }
+  #talk.listening { background: var(--down); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .75; } }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+  kbd { background: var(--raised); border: 1px solid var(--border); border-radius: 4px;
+        padding: 1px 6px; font: 500 12px "IBM Plex Mono", monospace; }
+  #heard { min-height: 22px; margin-top: 12px; font-size: 14px; color: var(--muted);
+           text-align: center; }
+
+  #pending { display: none; border: 2px solid var(--brand); }
+  #pending.warn { border-color: var(--warn-text); background: var(--warn-bg); }
+  #pending .sym { font-family: Fraunces, serif; font-weight: 900; font-size: 34px; }
+  #pending .quote-line { font-size: 15px; margin: 6px 0 12px; }
+  #bar { height: 6px; background: var(--raised); border-radius: 3px; overflow: hidden;
+         margin-bottom: 14px; }
+  #bar div { height: 100%; background: var(--brand); transition: width .9s linear; }
+  .btnrow { display: flex; gap: 10px; }
+  .btnrow button { flex: 1; padding: 14px; font: 700 16px Inter; border: 0;
+                   border-radius: 10px; cursor: pointer; color: #fff; }
+  #btn-accept { background: var(--up); }
+  #btn-pass { background: var(--muted); }
+
+  form#typed { display: flex; gap: 8px; }
+  #cmd { flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+         background: var(--surface); color: var(--text); font: 14px "IBM Plex Mono", monospace; }
+  #typed button { padding: 10px 16px; border: 0; border-radius: 8px; background: var(--navy);
+                  color: #fff; font: 600 14px Inter; cursor: pointer; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px;
+       text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px;
+       border-bottom: 1px solid var(--border); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  .badge { font: 600 11px Inter; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .b-acc { background: var(--up-bg); color: var(--up); }
+  .b-rej { background: var(--down-bg); color: var(--down); }
+  .b-pass { background: var(--raised); color: var(--muted); }
+  .b-warn { background: var(--warn-bg); color: var(--warn-text); }
+  .b-info { background: var(--brand-50); color: var(--brand-600); }
+  #summary { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  #summary strong { color: var(--text); font-family: "IBM Plex Mono", monospace; }
+  .empty { color: var(--muted); font-size: 14px; padding: 10px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Locate Console</h1>
+  <span id="mode" class="mode">…</span>
+  <span class="rules-note" id="rules-note"></span>
+</header>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <button id="talk">🎤 Talk</button>
+      <div class="hint"><kbd>Space</kbd> talk · <kbd>A</kbd> accept · <kbd>P</kbd> pass · <kbd>I</kbd> inventory</div>
+      <div id="heard"></div>
+    </div>
+
+    <div class="card" id="pending">
+      <div class="sym" id="p-sym"></div>
+      <div class="quote-line">
+        <span class="num" id="p-rate"></span> / share ·
+        <span class="num" id="p-qty"></span> shares ·
+        total <strong class="num" id="p-total"></strong>
+      </div>
+      <div id="bar"><div></div></div>
+      <div class="btnrow">
+        <button id="btn-accept">Accept (A)</button>
+        <button id="btn-pass">Pass (P)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Type a command</h2>
+      <form id="typed">
+        <input id="cmd" placeholder='locate 500 FRSX' autocomplete="off">
+        <button>Send</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Locate inventory</h2>
+      <div id="inv" class="empty">—</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Today’s locates</h2>
+      <table>
+        <thead><tr>
+          <th>Time</th><th>Symbol</th><th class="num">Shares</th>
+          <th class="num">Rate/sh</th><th class="num">Total</th><th>Result</th>
+        </tr></thead>
+        <tbody id="hist"></tbody>
+      </table>
+      <div id="summary"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let busy = false, pendingShown = false;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} :
+    { method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body) });
+  return r.json();
+}
+
+function money(x) { return "$" + Number(x).toFixed(2); }
+function rateFmt(r) {
+  const c = r * 100;
+  return (c < 1 ? c.toFixed(2) : c.toFixed(c < 10 ? 1 : 0)) + "¢";
+}
+
+function badge(result) {
+  const map = {
+    ACCEPTED: ["b-acc", "accepted"], AUTO_REJECT: ["b-rej", "auto-rejected"],
+    Rejected: ["b-rej", "broker rejected"], ACCEPT_FAILED: ["b-rej", "accept failed"],
+    PASSED: ["b-pass", "passed"], EXPIRED_UNANSWERED: ["b-warn", "expired"],
+    NO_QUOTE: ["b-warn", "no quote"], SELLBACK_SENT: ["b-info", "sold back"],
+    SELLBACK_FAILED: ["b-rej", "sellback failed"],
+  };
+  const [cls, label] = map[result] || ["b-pass", result.toLowerCase()];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+async function refreshHistory() {
+  const { history } = await api("/api/history");
+  const tb = $("hist");
+  tb.innerHTML = history.length ? "" : `<tr><td colspan="6" class="empty">No locate activity yet today.</td></tr>`;
+  let accepted = 0, spent = 0;
+  for (const h of history) {
+    if (h.result === "ACCEPTED") { accepted++; spent += h.total || 0; }
+    const t = (h.ts || "").slice(11, 19);
+    tb.innerHTML += `<tr>
+      <td class="num">${t}</td><td><strong>${h.symbol || ""}</strong></td>
+      <td class="num">${h.qty ?? ""}</td>
+      <td class="num">${h.rate != null ? rateFmt(h.rate) : "—"}</td>
+      <td class="num">${h.total != null ? money(h.total) : "—"}</td>
+      <td>${badge(h.result || "")}</td></tr>`;
+  }
+  $("summary").innerHTML =
+    `<strong>${history.length}</strong> quotes today · ` +
+    `<strong>${accepted}</strong> accepted · ` +
+    `<strong>${money(spent)}</strong> spent on locates`;
+}
+
+async function refreshInventory() {
+  try {
+    const { inventory } = await api("/api/inventory");
+    $("inv").innerHTML = (inventory && inventory.length)
+      ? inventory.map(i => `<div><strong>${i.symbol}</strong>
+          <span class="num">${i.available ?? i.locateShares ?? "?"}</span> available</div>`).join("")
+      : "No locates held.";
+  } catch { $("inv").textContent = "unavailable"; }
+}
+
+function showPending(p) {
+  pendingShown = !!p;
+  $("pending").style.display = p ? "block" : "none";
+  if (!p) return;
+  $("pending").classList.toggle("warn", !!p.warn);
+  $("p-sym").textContent = (p.warn ? "⚠ " : "") + p.symbol;
+  $("p-rate").textContent = rateFmt(p.rate);
+  $("p-qty").textContent = p.qty;
+  $("p-total").textContent = money(p.total);
+  $("bar").firstElementChild.style.width = (p.expires_in / 30 * 100) + "%";
+}
+
+async function pollState() {
+  try {
+    const s = await api("/api/state");
+    $("mode").textContent = s.mode;
+    $("mode").className = "mode " + (s.mode === "mock" ? "mock" : "real");
+    $("rules-note").textContent =
+      `auto-reject ≥ $${s.rules.auto_reject_at_per_share.toFixed(2)}/sh · ` +
+      `warn ≥ $${s.rules.warn_at_per_share.toFixed(2)}/sh`;
+    showPending(s.pending);
+  } catch {}
+}
+
+function setBusy(b, label) {
+  busy = b;
+  $("talk").disabled = b;
+  $("talk").classList.toggle("listening", b);
+  $("talk").textContent = b ? (label || "🎤 Listening…") : "🎤 Talk";
+}
+
+async function handleResult(res) {
+  if (res.heard) $("heard").textContent = "heard: “" + res.heard + "”";
+  await Promise.all([pollState(), refreshHistory()]);
+  if (["accepted", "sellback_sent"].includes(res.status)) refreshInventory();
+  if (res.status === "offered") listen("answer");   // mic reopens for accept/pass
+  if (res.status === "say_accept_or_pass") listen("answer");
+}
+
+async function listen(context) {
+  if (busy) return;
+  setBusy(true, context === "answer" ? "🎤 Accept or pass?" : "🎤 Listening…");
+  try { await handleResult(await api("/api/listen", { context: context || "command" })); }
+  finally { setBusy(false); }
+}
+
+async function answer(accept) {
+  if (!pendingShown) return;
+  await handleResult(await api(accept ? "/api/accept" : "/api/pass", {}));
+}
+
+$("talk").onclick = () => listen("command");
+$("btn-accept").onclick = () => answer(true);
+$("btn-pass").onclick = () => answer(false);
+$("typed").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("cmd").value.trim();
+  if (!text) return;
+  $("cmd").value = "";
+  setBusy(true, "⏳ Working…");
+  try { await handleResult(await api("/api/command", { text })); }
+  finally { setBusy(false); }
+};
+
+document.addEventListener("keydown", e => {
+  if (e.target === $("cmd") || e.repeat) return;
+  if (e.code === "Space" || e.key === "l") { e.preventDefault(); listen("command"); }
+  else if (e.key === "a") answer(true);
+  else if (e.key === "p") answer(false);
+  else if (e.key === "i") refreshInventory();
+  else if (e.key === "/") { e.preventDefault(); $("cmd").focus(); }
+});
+
+pollState(); refreshHistory(); refreshInventory();
+setInterval(pollState, 1000);
+setInterval(refreshHistory, 5000);
+</script>
+</body>
+</html>

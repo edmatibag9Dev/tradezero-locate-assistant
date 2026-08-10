@@ -1,0 +1,32 @@
+# TradeZero Locate Assistant
+
+> Voice-controlled short-locate quoting for TradeZero day traders. Speak "locate 500 FRSX" —
+> on-device Whisper transcribes, the TradeZero locates API returns a per-share price, a rule
+> engine auto-rejects expensive borrows and asks approval on the rest, and every outcome lands
+> in a JSONL log rendered by a local web console. Locates only; order execution stays manual.
+
+## Start here
+- [AGENTS.md](AGENTS.md): canonical agent guide — file map, data contract, money rule, gates.
+- [README.md](README.md): human quickstart.
+- [BUILD-PLAN.md](BUILD-PLAN.md): architecture decisions + findings (incl. paper-account dead end).
+
+## Engine
+- [src/tz_api.py](src/tz_api.py): TradeZero locates REST client (quote/accept/cancel/inventory/sell).
+- [src/rules.py](src/rules.py): approval rule engine — auto-reject / warn / ask bands.
+- [src/voice.py](src/voice.py): sox mic capture, whisper.cpp transcription, command parser.
+- [src/server.py](src/server.py): localhost web console + JSON API.
+- [src/app.py](src/app.py): terminal UI (typed or --voice).
+- [SPEC-locate-workflow.md](SPEC-locate-workflow.md): TradeZero API contract, log schema, rule bands.
+
+## Setup
+- [setup.sh](setup.sh): brew deps + Whisper model download + local config creation.
+- [config.example.json](config.example.json): rules/polling/mode template.
+- [.env.example](.env.example): API key env vars.
+
+## Key rules
+- Locate `rate` is per share; quote quantities must be multiples of 100; offers expire in 30 s.
+- Accept is all-or-nothing and spends real money on live accounts — NEVER automate accept.
+- Auto-reject at ≥ $0.20/share (configurable); warn at ≥ $0.10; everything below asks.
+- Paper accounts reject all locate quotes by design; use --mock for practice, live keys for real.
+- Never commit .env, config.json, logs/, models/, CONFIG.local.md (all gitignored).
+- logs/quotes.jsonl is append-only; preserve its field vocabulary.

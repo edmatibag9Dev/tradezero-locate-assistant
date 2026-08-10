@@ -1,0 +1,11 @@
+# One ticker per line (or space-separated). Voice recognition prioritizes
+# these symbols — keep it updated with the day's short candidates.
+# Examples from recent mastermind boards:
+IQST
+FRSX
+HSCS
+TWAV
+FOXS
+ROLR
+BOLD
+ATLN

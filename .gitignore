@@ -1,0 +1,15 @@
+# Secrets & personal config — never commit
+.env
+CONFIG.local.md
+config.json
+
+# Real trading data — never commit (sample committed in samples/)
+logs/
+
+# Large model binary — downloaded by setup.sh (~141 MB)
+models/
+
+# Language / OS noise
+__pycache__/
+*.pyc
+.DS_Store
