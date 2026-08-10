@@ -266,6 +266,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"status": "api_error", "error": str(e)}, 502)
 
 
+def lan_ip() -> str:
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 80))  # no packets sent; just picks the LAN interface
+        return s.getsockname()[0]
+    except OSError:
+        return "0.0.0.0"
+    finally:
+        s.close()
+
+
 def main() -> None:
     global CLIENT, MODE
     load_env()
@@ -278,8 +290,19 @@ def main() -> None:
         CLIENT = MockTradeZeroClient()
     else:
         CLIENT = TradeZeroClient(CONFIG["base_url"], CONFIG["account_id"])
-    print(f"Locate console ({MODE} mode): http://127.0.0.1:{port}")
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+
+    host = "127.0.0.1"
+    if "--lan" in sys.argv:
+        host = "0.0.0.0"
+        print(f"Locate console ({MODE} mode) on ALL interfaces:")
+        print(f"  this Mac:      http://127.0.0.1:{port}")
+        print(f"  from your LAN: http://{lan_ip()}:{port}")
+        print("  ⚠ LAN mode: anyone on this network can reach the console —")
+        print("    accept/pass included. Use only on a trusted home network.")
+    else:
+        print(f"Locate console ({MODE} mode): http://127.0.0.1:{port}")
+        print("  (this Mac only — start with --lan to allow other devices)")
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
 
 
 if __name__ == "__main__":

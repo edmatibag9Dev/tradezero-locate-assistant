@@ -5,6 +5,15 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.1.0] — 2026-08-10
+
+### Added
+- `--lan` flag for the web console: binds all interfaces so other devices on a trusted
+  network (e.g. a laptop next to the trading Mac) can reach the console; startup banner
+  prints the LAN URL and a security warning. Default remains localhost-only.
+- README "second screen / another Mac" instructions, including the firewall prompt and the
+  fact that mic + spoken read-back stay on the server Mac.
+
 ## [1.0.0] — 2026-08-10
 
 ### Added

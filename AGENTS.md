@@ -76,8 +76,9 @@ Rules an agent must preserve:
    otherwise speak price + total (with warning ≥ warn threshold) and open the accept window.
 4. **Accept/pass**: user must answer within TradeZero's **30-second** offer window; accept =
    POST `/locates/accept` (all-or-nothing), pass = DELETE cancel. Outcome spoken + logged.
-5. **Console** (`server.py`, localhost only): browser triggers the same flows over a JSON API;
-   mic and Whisper stay server-side. UI polls state (1 s) and history (5 s).
+5. **Console** (`server.py`, localhost by default; `--lan` binds all interfaces for
+   trusted-network access from other devices): browser triggers the same flows over a JSON
+   API; mic and Whisper stay server-side. UI polls state (1 s) and history (5 s).
 
 ## How to extend
 

@@ -55,7 +55,7 @@ Invariants:
 - `ts` local time with UTC offset, prefix-filterable by `YYYY-MM-DD`; `mode` ∈ mock · real.
 - No secrets, keys, or account IDs in any line.
 
-## Console JSON API (localhost only, `src/server.py`)
+## Console JSON API (`src/server.py` — localhost by default, `--lan` binds all interfaces)
 
 | Endpoint | Returns |
 |---|---|
