@@ -10,6 +10,8 @@ Run:  python3 src/app.py            (mode comes from config.json; "mock" needs n
       python3 src/app.py --live-config   force real client (still paper if paper keys)
 """
 
+from __future__ import annotations
+
 import json
 import math
 import subprocess

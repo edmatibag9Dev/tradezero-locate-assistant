@@ -7,6 +7,8 @@ the browser triggers listening and renders state. Localhost only.
 Run:  python3 src/server.py [--mock] [--port 8765]
 """
 
+from __future__ import annotations
+
 import json
 import subprocess
 import sys

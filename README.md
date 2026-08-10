@@ -53,7 +53,8 @@ selling trading group — fork it, tune the thresholds, and make it yours.
 
 ## How to Use
 
-0. **Prerequisites** — macOS with [Homebrew](https://brew.sh) and Python 3.10+. If
+0. **Prerequisites** — macOS with [Homebrew](https://brew.sh) and Python 3.9+ (the macOS
+   built-in `python3` works). If
    `brew --version` fails, install Homebrew first (asks for your Mac password):
    ```bash
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"

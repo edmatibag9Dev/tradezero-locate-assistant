@@ -7,6 +7,8 @@ No quotes are requested, nothing is accepted, no money is spent.
 Run:  python3 src/check_keys.py
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sys

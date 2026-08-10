@@ -8,6 +8,8 @@ First mic use triggers a macOS permission prompt for the terminal app —
 click Allow, then re-try the command.
 """
 
+from __future__ import annotations
+
 import difflib
 import re
 import subprocess

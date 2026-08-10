@@ -12,6 +12,8 @@ A few fixed symbols for testing the rule bands:
 Anything else gets a pseudo-random rate under $0.30.
 """
 
+from __future__ import annotations
+
 import hashlib
 import time
 
