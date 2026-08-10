@@ -89,8 +89,8 @@ Rules an agent must preserve:
 - **New API endpoint:** add a method to `src/tz_api.py` (and mirror it in `mock_api.py` so
   mock mode keeps working; tests rely on the mock).
 - **UI changes:** `web/index.html` is self-contained (inline CSS/JS, brand tokens in `:root`).
-- **End-of-day sell-back sweep (planned):** iterate `/locates/inventory`, POST `/locates/sell`
-  per refundable position; wire a button into the console.
+- **Sell-back sweep** (shipped 1.3.0): `flow_sweep()` in `server.py` / `do_sweep()` in
+  `app.py` — extend there for scheduling or filters (e.g. keep symbols still on watch).
 
 ## Privacy — hard rules
 
@@ -113,7 +113,7 @@ Rules an agent must preserve:
 ## Verification gates (run before declaring a change done)
 
 1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary).
-2. `python3 tests/test_voice.py` — 24/24 (parser + synthetic TTS→Whisper→parse audio;
+2. `python3 tests/test_voice.py` — 27/27 (parser + synthetic TTS→Whisper→parse audio;
    needs `say`, `sox`, `whisper-cli`, and the model present).
 3. Mock CLI round trip: `printf 'locate 500 EXPN\nquit\n' | python3 src/app.py --mock`
    → EXPN auto-rejects.

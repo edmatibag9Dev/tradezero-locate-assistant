@@ -28,6 +28,10 @@ selling trading group — fork it, tune the thresholds, and make it yours.
   with per-day totals: quotes, accepts, dollars spent on borrows.
 - **Spoken read-back** — price per share and total cost announced via macOS speech.
 - **Locate inventory + sell-back** — see held locates; sell unused shares back for credit.
+- **End-of-day sweep** — one action refunds ALL unused locate shares: the console button
+  ("Sell back all unused", hotkey `S`), voice (*"sell back everything"* / *"sweep"*), or the
+  CLI `sweep` command. Per-symbol results reported; failures (e.g. Single Use tied to a
+  short) named individually.
 - **Mock mode** — practice the entire flow with zero risk and no API keys.
 - **Terminal UI** — the same flows work in a plain CLI (`src/app.py`), typed or voice.
 

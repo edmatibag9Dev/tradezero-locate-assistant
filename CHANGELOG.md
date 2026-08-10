@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.3.0] — 2026-08-10
+
+### Added
+- End-of-day sell-back sweep: refunds all unused locate shares in one action — console
+  button + `S` hotkey (with confirm), voice ("sell back everything" / "sweep"), CLI `sweep`
+  command, and `POST /api/sweep`. Per-symbol results with named failures; each sell-back
+  logged to the quote history. Voice tests now 27/27.
+
 ## [1.2.0] — 2026-08-10
 
 ### Added

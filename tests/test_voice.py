@@ -47,6 +47,9 @@ cases = [
     ("Inventory", {"cmd": "inventory"}),
     ("what are my holdings", {"cmd": "inventory"}),
     ("sell back 100 FRSX", {"cmd": "sellback", "qty": 100, "symbol": "FRSX"}),
+    ("sell back everything", {"cmd": "sweep"}),
+    ("sell back all unused locates", {"cmd": "sweep"}),
+    ("sweep", {"cmd": "sweep"}),
     ("quit", {"cmd": "quit"}),
     ("locate FRSX", {"cmd": "unknown"}),          # no quantity
     ("locate 500", {"cmd": "unknown"}),           # no ticker

@@ -170,6 +170,33 @@ def do_inventory(client) -> None:
     say("Holding " + "; ".join(parts))
 
 
+def do_sweep(client) -> None:
+    inv = client.inventory()
+    todo = [(r.get("symbol"), int(r.get("available", r.get("locateShares", 0)) or 0))
+            for r in inv]
+    todo = [(s, a) for s, a in todo if s and a > 0]
+    if not todo:
+        say("Nothing to sweep — no unused locate shares.")
+        return
+    swept, failed = 0, []
+    for symbol, avail in todo:
+        req = f"S-{symbol}-{uuid.uuid4().hex[:8].upper()}"
+        out = client.sell_back(symbol, avail, req)
+        ok = str(out.get("locateSellSent", "")).lower() == "true"
+        log_quote({"symbol": symbol, "qty": avail,
+                   "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
+        print(f"   {symbol}: {avail} shares -> {'sent' if ok else 'FAILED'} "
+              f"{out.get('text', '')}".rstrip())
+        if ok:
+            swept += avail
+        else:
+            failed.append(symbol)
+    msg = f"Sweep sent — {swept} shares across {len(todo) - len(failed)} symbols."
+    if failed:
+        msg += f" Failed: {', '.join(failed)}."
+    say(msg)
+
+
 def do_sellback(client, shares: int, symbol: str) -> None:
     req_id = f"S-{symbol.upper()}-{uuid.uuid4().hex[:8].upper()}"
     out = client.sell_back(symbol, shares, req_id)
@@ -225,6 +252,8 @@ def main() -> None:
                     parsed = {"cmd": "inventory"}
                 elif cmd == "sellback" and len(parts) == 3:
                     parsed = {"cmd": "sellback", "qty": int(parts[1]), "symbol": parts[2]}
+                elif cmd == "sweep":
+                    parsed = {"cmd": "sweep"}
                 elif cmd in ("quit", "exit", "q"):
                     parsed = {"cmd": "quit"}
                 else:
@@ -246,6 +275,8 @@ def main() -> None:
                 do_inventory(client)
             elif cmd == "sellback":
                 do_sellback(client, parsed["qty"], parsed["symbol"])
+            elif cmd == "sweep":
+                do_sweep(client)
             elif cmd == "quit":
                 break
             elif cmd in ("accept", "pass"):

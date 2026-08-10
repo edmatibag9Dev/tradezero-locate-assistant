@@ -63,6 +63,7 @@ Invariants:
 | `POST /api/listen {context}` | Records mic, transcribes, acts; `context: "command" \| "answer"` |
 | `POST /api/command {text}` | Same flows from typed text |
 | `POST /api/accept` / `POST /api/pass` | Resolve the pending quote |
+| `POST /api/sweep` | Sell back all unused locate shares; `{status, swept_shares, results:[{symbol, qty, ok, detail}]}` |
 | `GET /api/history` | `{history: [today's log lines, newest first]}` |
 | `GET /api/inventory` | `{inventory: [...]}` |
 

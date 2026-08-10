@@ -174,9 +174,49 @@ def flow_listen(context: str) -> dict:
                    "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
         say(f"Sell back {'sent' if ok else 'failed'} for {parsed['symbol']}.")
         return {**out, "status": "sellback_sent" if ok else "sellback_failed"}
+    if parsed["cmd"] == "sweep":
+        return {**out, **flow_sweep()}
     if parsed["cmd"] == "inventory":
         return {**out, "status": "inventory", "inventory": CLIENT.inventory()}
     return {**out, "status": "not_understood"}
+
+
+def flow_sweep() -> dict:
+    """Sell back every unused locate share. Refund-only; failures reported
+    per symbol (e.g. Single Use inventory tied to a short can't be refunded)."""
+    try:
+        inv = CLIENT.inventory()
+    except TradeZeroError as e:
+        return {"status": "api_error", "error": str(e)}
+    results, swept_shares, failed = [], 0, []
+    for row in inv:
+        symbol = row.get("symbol")
+        avail = int(row.get("available", row.get("locateShares", 0)) or 0)
+        if not symbol or avail <= 0:
+            continue
+        req = f"S-{symbol}-{uuid.uuid4().hex[:8].upper()}"
+        try:
+            r = CLIENT.sell_back(symbol, avail, req)
+            ok = str(r.get("locateSellSent", "")).lower() == "true"
+        except TradeZeroError as e:
+            ok, r = False, {"text": str(e)}
+        log_quote({"symbol": symbol, "qty": avail,
+                   "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
+        results.append({"symbol": symbol, "qty": avail, "ok": ok,
+                        "detail": str(r.get("text", "")).strip()})
+        if ok:
+            swept_shares += avail
+        else:
+            failed.append(symbol)
+    if not results:
+        say("Nothing to sweep — no unused locate shares.")
+        return {"status": "nothing_to_sweep", "results": []}
+    msg = f"Sweep sent — {swept_shares} shares across " \
+          f"{sum(1 for x in results if x['ok'])} symbols."
+    if failed:
+        msg += f" Failed: {', '.join(failed)}."
+    say(msg)
+    return {"status": "swept", "swept_shares": swept_shares, "results": results}
 
 
 def today_history() -> list[dict]:
@@ -256,12 +296,23 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(flow_answer(True))
                 elif parsed["cmd"] == "pass":
                     self._json(flow_answer(False))
+                elif parsed["cmd"] == "sweep":
+                    self._json(flow_sweep())
+                elif parsed["cmd"] == "sellback":
+                    req = f"S-{parsed['symbol']}-{uuid.uuid4().hex[:8].upper()}"
+                    r = CLIENT.sell_back(parsed["symbol"], parsed["qty"], req)
+                    ok = str(r.get("locateSellSent", "")).lower() == "true"
+                    log_quote({"symbol": parsed["symbol"], "qty": parsed["qty"],
+                               "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
+                    self._json({"status": "sellback_sent" if ok else "sellback_failed"})
                 else:
                     self._json({"status": "not_understood", "parsed": parsed})
             elif self.path == "/api/accept":
                 self._json(flow_answer(True))
             elif self.path == "/api/pass":
                 self._json(flow_answer(False))
+            elif self.path == "/api/sweep":
+                self._json(flow_sweep())
             else:
                 self._json({"error": "not found"}, 404)
         except TradeZeroError as e:

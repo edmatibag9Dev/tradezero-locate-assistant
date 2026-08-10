@@ -152,6 +152,8 @@ def parse_command(text: str, watchlist: list[str] | None = None) -> dict:
         return {"cmd": "quit"}
 
     sellback = "sell" in words and ("back" in words or "sellback" in low)
+    if "sweep" in words or (sellback and any(w in ("everything", "all", "unused") for w in words)):
+        return {"cmd": "sweep"}
     locate = any(w in ("locate", "quote", "borrow") for w in words)
     if locate or sellback:
         # Find quantity anywhere after the verb, then a ticker.

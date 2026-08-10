@@ -102,7 +102,7 @@
   <div>
     <div class="card">
       <button id="talk">🎤 Talk</button>
-      <div class="hint"><kbd>Space</kbd> talk · <kbd>A</kbd> accept · <kbd>P</kbd> pass · <kbd>I</kbd> inventory</div>
+      <div class="hint"><kbd>Space</kbd> talk · <kbd>A</kbd> accept · <kbd>P</kbd> pass · <kbd>I</kbd> inventory · <kbd>S</kbd> sweep</div>
       <div id="heard"></div>
     </div>
 
@@ -131,6 +131,9 @@
     <div class="card">
       <h2>Locate inventory</h2>
       <div id="inv" class="empty">—</div>
+      <button id="btn-sweep" style="margin-top:12px;width:100%;padding:12px;font:600 14px Inter;
+        border:1px solid var(--brand-600);background:none;color:var(--brand-600);
+        border-radius:8px;cursor:pointer;">Sell back all unused (S)</button>
     </div>
   </div>
 
@@ -260,9 +263,22 @@ async function answer(accept) {
   await handleResult(await api(accept ? "/api/accept" : "/api/pass", {}));
 }
 
+async function sweep() {
+  if (!confirm("Sell back ALL unused locate shares?")) return;
+  setBusy(true, "⏳ Sweeping…");
+  try {
+    const res = await api("/api/sweep", {});
+    $("heard").textContent = res.status === "swept"
+      ? `swept ${res.swept_shares} shares`
+      : res.status.replaceAll("_", " ");
+    await Promise.all([refreshHistory(), refreshInventory()]);
+  } finally { setBusy(false); }
+}
+
 $("talk").onclick = () => listen("command");
 $("btn-accept").onclick = () => answer(true);
 $("btn-pass").onclick = () => answer(false);
+$("btn-sweep").onclick = sweep;
 $("typed").onsubmit = async e => {
   e.preventDefault();
   const text = $("cmd").value.trim();
@@ -279,6 +295,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "a") answer(true);
   else if (e.key === "p") answer(false);
   else if (e.key === "i") refreshInventory();
+  else if (e.key === "s") sweep();
   else if (e.key === "/") { e.preventDefault(); $("cmd").focus(); }
 });
 
