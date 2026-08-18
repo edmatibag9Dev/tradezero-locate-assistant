@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.3.1] — 2026-08-14
+
+### Fixed
+- Voice capture failed instantly ("mic_error") under launchd autostart: launchd jobs get a
+  minimal PATH without /opt/homebrew/bin, so `rec` and `whisper-cli` were never found.
+  voice.py now resolves both to absolute paths (shutil.which + Homebrew fallbacks), and the
+  LaunchAgent plist sets an explicit PATH. Verified by transcribing under a stripped PATH.
+
 ## [1.3.0] — 2026-08-10
 
 ### Added

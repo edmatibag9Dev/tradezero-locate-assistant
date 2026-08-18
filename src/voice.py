@@ -12,12 +12,30 @@ from __future__ import annotations
 
 import difflib
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL = ROOT / "models" / "ggml-base.en.bin"
 WATCHLIST_FILE = ROOT / "watchlist.txt"
+
+
+def _bin(name: str) -> str:
+    """Resolve a tool to an absolute path. launchd jobs get a minimal PATH
+    without /opt/homebrew/bin, so PATH lookup alone fails under autostart."""
+    found = shutil.which(name)
+    if found:
+        return found
+    for d in ("/opt/homebrew/bin", "/usr/local/bin"):
+        cand = Path(d) / name
+        if cand.exists():
+            return str(cand)
+    return name
+
+
+REC = _bin("rec")
+WHISPER_CLI = _bin("whisper-cli")
 
 # Words that are never tickers even though they show up in caps/short form.
 STOPWORDS = {"OF", "THE", "A", "AN", "ON", "FOR", "TO", "AT", "IN", "SHARES",
@@ -38,7 +56,7 @@ NUMBER_WORDS = {
 def record(wav_path: str, max_seconds: int = 8) -> bool:
     """Record mic until ~1.4s of silence (or max_seconds). True on success."""
     cmd = [
-        "rec", "-q", "-r", "16000", "-c", "1", wav_path,
+        REC, "-q", "-r", "16000", "-c", "1", wav_path,
         "trim", "0", str(max_seconds),
         "silence", "1", "0.1", "1.5%", "1", "1.4", "3%",
     ]
@@ -51,7 +69,7 @@ def record(wav_path: str, max_seconds: int = 8) -> bool:
 
 def transcribe(wav_path: str) -> str:
     out = subprocess.run(
-        ["whisper-cli", "-m", str(MODEL), "-f", wav_path, "--no-timestamps"],
+        [WHISPER_CLI, "-m", str(MODEL), "-f", wav_path, "--no-timestamps"],
         capture_output=True, text=True, timeout=30)
     return out.stdout.strip() if out.returncode == 0 else ""
 
