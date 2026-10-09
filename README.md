@@ -3,17 +3,23 @@
 Voice-controlled short-locate quoting, rule-gated approval, and a daily locate history console
 for TradeZero day traders — locates only, order execution stays in your trading platform.
 
-## Overview / Purpose
+## Project Overview
 
-Short sellers on TradeZero often need to locate hard-to-borrow shares in a hurry: quotes expire
-in 30 seconds, and clicking through the platform while watching the tape costs time and focus.
 This tool turns the locate workflow into a hands-free loop: press a key, say *"locate 500 shares
 of F R S X"*, hear the price read back aloud, and say *"accept"* or *"pass"* — all inside the
 quote window. A configurable cost rule protects you from expensive borrows automatically:
 quotes at or above $0.20/share are rejected before you're even asked, and anything at or above
 $0.10/share carries a spoken warning. Everything runs locally on your Mac; speech never leaves
-the machine, and your API keys stay in a local env file. Built by and for members of a short
-selling trading group — fork it, tune the thresholds, and make it yours.
+the machine, and your API keys stay in a local env file. Technically it is a stdlib-only Python
+app: on-device speech (sox + whisper.cpp) → command parser → TradeZero locates REST API → rule
+gate → spoken/web read-back, with every quote logged to JSONL.
+
+## Purpose
+
+Short sellers on TradeZero often need to locate hard-to-borrow shares in a hurry: quotes expire
+in 30 seconds, and clicking through the platform while watching the tape costs time and focus.
+Built by and for members of a short selling trading group — fork it, tune the thresholds, and
+make it yours.
 
 ## Features
 
@@ -35,7 +41,7 @@ selling trading group — fork it, tune the thresholds, and make it yours.
 - **Mock mode** — practice the entire flow with zero risk and no API keys.
 - **Terminal UI** — the same flows work in a plain CLI (`src/app.py`), typed or voice.
 
-## Files
+## File Descriptions
 
 | File | Description |
 |---|---|
@@ -93,6 +99,16 @@ selling trading group — fork it, tune the thresholds, and make it yours.
    `logs/console.log`. If the mic fails silently afterward, grant Microphone access to
    `python3`/`Python` in System Settings → Privacy & Security.
 
+### Update / refresh
+
+- **Daily:** refresh `watchlist.txt` with the day's gap-up candidates before the open.
+- **History:** `logs/quotes.jsonl` accumulates every outcome; the console's table shows today,
+  and the file is your long-term locate-cost dataset (append-only JSONL, easy to analyze).
+- **Thresholds:** edit `rules` in `config.json`; changes apply on next server start.
+- **Model upgrade:** drop a different ggml model into `models/` and update the path in
+  `src/voice.py` if you want higher accuracy (small.en) at some speed cost.
+- **Verify any change:** run the gates in `AGENTS.md` (rule tests, voice tests, mock round trips).
+
 ## Data Sources
 
 - **TradeZero Developer API** — https://developer.tradezero.com (locates, accounts, orders,
@@ -103,20 +119,28 @@ selling trading group — fork it, tune the thresholds, and make it yours.
   Face (downloaded by `setup.sh`; all transcription is on-device).
 - Quote history is generated locally in `logs/quotes.jsonl` (gitignored; see `samples/`).
 
-## Known Limitations / Workarounds
+## Known Limitations
 
 - **Paper accounts reject every locate quote by design** (TradeZero simulates no locate
-  inventory) — paper validates keys and request formatting only. Test the priced flow on a live
-  account with quote → **pass** (costs nothing); only *accept* spends money.
-- Locates must be quoted in **multiples of 100 shares**; the app rounds up and tells you.
-- Accepting is **all-or-nothing** per quote — no partial accepts (you can short less than you
-  locate, and sell the rest back).
+  inventory) — paper validates keys and request formatting only.
+- Locates must be quoted in **multiples of 100 shares**.
+- Accepting is **all-or-nothing** per quote — no partial accepts.
 - "Single Use" locates (Reg SHO threshold symbols) can't be sold back after funding a short.
-- Extended-hours and market-hours behavior of the locate desk isn't documented by TradeZero;
-  expect quotes mainly during regular sessions.
-- Push-to-talk requires the browser tab (or terminal) to have focus; a global OS-level hotkey
-  is on the roadmap.
+- Extended-hours and market-hours behavior of the locate desk isn't documented by TradeZero.
+- Push-to-talk requires the browser tab (or terminal) to have focus.
 - macOS only (uses `say`, sox/coreaudio, Homebrew).
+
+## Workarounds
+
+- **Paper accounts:** test the priced flow on a live account with quote → **pass** (costs
+  nothing); only *accept* spends money. Mock mode (`--mock`) simulates the full flow with fixed
+  rule-band symbols.
+- **100-share multiples:** the app rounds up and tells you.
+- **All-or-nothing accept:** you can short less than you locate, and sell the rest back.
+- **Single Use locates:** no workaround.
+- **Undocumented session hours:** no workaround; expect quotes mainly during regular sessions.
+- **Push-to-talk focus:** no workaround yet; a global OS-level hotkey is on the roadmap.
+- **macOS only:** no workaround.
 
 ## Build Notes
 
@@ -132,19 +156,9 @@ selling trading group — fork it, tune the thresholds, and make it yours.
   always requires an explicit human answer. See `AGENTS.md` for the full contract.
 - Architecture and dead-ends (including the paper-locate discovery) in `BUILD-PLAN.md`.
 
-## Update / Refresh Instructions
-
-- **Daily:** refresh `watchlist.txt` with the day's gap-up candidates before the open.
-- **History:** `logs/quotes.jsonl` accumulates every outcome; the console's table shows today,
-  and the file is your long-term locate-cost dataset (append-only JSONL, easy to analyze).
-- **Thresholds:** edit `rules` in `config.json`; changes apply on next server start.
-- **Model upgrade:** drop a different ggml model into `models/` and update the path in
-  `src/voice.py` if you want higher accuracy (small.en) at some speed cost.
-- **Verify any change:** run the gates in `AGENTS.md` (rule tests, voice tests, mock round trips).
-
 ---
 *Not affiliated with TradeZero. Trading involves risk; locate fees are real money on live
 accounts. This tool never places orders and never accepts a locate without your explicit
 confirmation.*
 
-*Last updated: 2026-08-10*
+*Last updated: 2026-10-09*

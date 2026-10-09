@@ -1,4 +1,5 @@
 # AGENTS.md — guide for AI agents working in this repo
+> Standard: REPO-STANDARD 2026-10-09 · Commits, README and staging: CONTRIBUTING.md
 
 This file is the canonical entry point for any AI agent (Claude Code, Cowork, Codex, etc.)
 asked to **use, reference, extend, or rebuild** this project. Read it before acting.
@@ -110,7 +111,9 @@ Rules an agent must preserve:
 > (`--mock`) simulates the full flow with fixed rule-band symbols: CHEP $0.004, MIDD $0.05,
 > WARN $0.12, EXPN $0.35.
 
-## Verification gates (run before declaring a change done)
+## Verification gates
+
+Run before declaring a change done:
 
 1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary).
 2. `python3 tests/test_voice.py` — 27/27 (parser + synthetic TTS→Whisper→parse audio;
@@ -123,57 +126,5 @@ Rules an agent must preserve:
    `/api/history` shows both rows.
 5. Scrub grep (public repo): `git grep -I -nE "(TZ_API|SECRET|account_id)" -- ':!*.example*' ':!AGENTS.md'`
    must show no real values; `git status --short` must not list `.env`, `config.json`, `logs/`, `models/`.
-
----
-
-## What to Stage — Never Commit Blindly
-
-Staging is part of the commit, not a detail beneath it. A commit records what you
-staged, so an unconditional stage records whatever state the working tree happens
-to be in — including damage you did not cause and did not notice.
-
-### Rules
-
-- **Stage named paths.** `git add <path> <path>` — only the files your change
-  actually touched. You should be able to say why each one is in the commit.
-- **Never `git add -A`, `git add .`, `git add --all`, or `git commit -a`** in a
-  repository that already has history. Use them only to bootstrap a fresh
-  `git init`, and verify the staged list before that first commit.
-- **Check for deletions before every commit:**
-
-  ```
-  git diff --cached --name-status --diff-filter=D
-  ```
-
-  If that prints anything you did not deliberately delete, STOP. Unstage with
-  `git reset`, find out why the file is missing, and restore it. Do not commit
-  the removal.
-- **A file missing from the working tree is not a change.** It is a filesystem,
-  sync-client, or tooling problem. Committing its deletion converts a recoverable
-  accident into recorded history and destroys the git copy that would have
-  restored it.
-- **Untracked is not protected.** A file that was never committed has no git copy
-  at all. If a working file matters, commit it or ignore it deliberately — never
-  leave it untracked by accident.
-
-### Staging self-check
-
-- [ ] Staged named paths only — no `-A`, no `.`, no `-a`
-- [ ] `git diff --cached --name-status --diff-filter=D` shows nothing unintended
-- [ ] Every staged path belongs to the change described in the commit message
-
-### Why this rule exists
-
-On 2026-08-30, commit `3df1d05` in the ai-briefing repo — a routine data commit —
-was staged unconditionally while two files were missing from the working tree. A
-two-way sync client had deleted them nine days earlier. The commit recorded both
-deletions, removing the last recoverable copies from git and leaving the sync
-client's quarantine folder as the only source. They were recovered, but only
-because that quarantine had not yet been purged on its retention timer.
-
-The same pattern nearly caused a data leak once before: an untracked `reports/`
-folder holding local absolute paths and an email address sat in a public repo,
-where any `git add .` would have swept it into a public commit.
-
-Unconditional staging fails in both directions. It commits what should never be
-published, and it deletes what should never be lost.
+6. Staged named paths only, and `git diff --cached --name-status --diff-filter=D` prints nothing — staging rules: [CONTRIBUTING.md → What to Stage](CONTRIBUTING.md#what-to-stage--never-commit-blindly).
+7. `python3 ~/.claude/skills/repo-standard/scripts/repo-check.py .` reports no FAIL lines.

@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [2026-10-09] — Conform to repo standard 2026-10-09
+
+Documentation and ignore rules only; no code change, so no version bump.
+
+### Changed
+- **`AGENTS.md`** — added the `Standard: REPO-STANDARD 2026-10-09` stamp on line 2; renamed the
+  gates heading to `## Verification gates`; added a staging gate and a final `repo-check.py` gate;
+  replaced the pasted "What to Stage — Never Commit Blindly" block (a verbatim copy of
+  `CONTRIBUTING.md`) with a link.
+- **`README.md`** — split "Overview / Purpose" into `## Project Overview` and `## Purpose` (one
+  technical sentence added, taken from AGENTS.md's design line); renamed "Files" to
+  `## File Descriptions`; split "Known Limitations / Workarounds" into `## Known Limitations` and
+  `## Workarounds`; folded "Update / Refresh Instructions" into How to Use as
+  `### Update / refresh`; `Last updated` set to 2026-10-09.
+- **`.gitignore`** — added `.env.*`, `!.env.example`, `.venv/`, `node_modules/` and `*.bak*`.
+
 ## [1.3.1] — 2026-08-14
 
 ### Fixed

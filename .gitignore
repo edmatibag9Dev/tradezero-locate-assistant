@@ -1,5 +1,7 @@
 # Secrets & personal config — never commit
 .env
+.env.*
+!.env.example
 CONFIG.local.md
 config.json
 
@@ -9,7 +11,10 @@ logs/
 # Large model binary — downloaded by setup.sh (~141 MB)
 models/
 
-# Language / OS noise
+# Backups, environments, language / OS noise
+*.bak*
+.venv/
+node_modules/
 __pycache__/
 *.pyc
 .DS_Store
