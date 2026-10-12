@@ -32,6 +32,12 @@ make it yours.
 - **Web console** (localhost) — mic button, hotkeys (`Space` talk, `A` accept, `P` pass,
   `I` inventory), pending-quote card, locate inventory, and a running **today's locates** table
   with per-day totals: quotes, accepts, dollars spent on borrows.
+- **Locate cost report** — a console card that totals locate spend from the quote log:
+  dollars spent, accepted count and accept rate, average $/share actually paid, auto-rejected
+  count with the quote value declined, passed/expired counts, sell-backs, and a per-symbol
+  table (requests, accepted, shares, spend, avg paid, quoted range). Period: Today / 7 days /
+  30 days / All; mode: Real / Mock / All (defaults to Real, last 7 days). Reads only the
+  local log — no API calls, no cost. Also available as JSON at `GET /api/report`.
 - **Spoken read-back** — price per share and total cost announced via macOS speech.
 - **Locate inventory + sell-back** — see held locates; sell unused shares back for credit.
 - **End-of-day sweep** — one action refunds ALL unused locate shares: the console button
@@ -52,12 +58,13 @@ make it yours.
 | `src/tz_api.py` | TradeZero REST client (locate endpoints only, no dependencies) |
 | `src/mock_api.py` | Offline mock client with fixed practice symbols |
 | `src/rules.py` | Approval rule engine |
+| `src/report.py` | Locate-cost report: aggregates `logs/quotes.jsonl` by period, mode and symbol |
 | `src/voice.py` | Mic capture, on-device Whisper transcription, command parser |
 | `src/check_keys.py` | Read-only validator for your API keys and config |
 | `config.example.json` | Config template — copy to `config.json` (gitignored) |
 | `.env.example` | API key template — copy to `.env` (gitignored) |
 | `watchlist.txt` | Tickers the voice parser prioritizes; edit each morning |
-| `tests/` | Rule-band tests + synthetic TTS→Whisper→parse audio tests |
+| `tests/` | Rule-band tests, locate-cost report tests, synthetic TTS→Whisper→parse audio tests |
 | `samples/quotes.sample.jsonl` | Example of the quote log format |
 | `AGENTS.md` / `llms.txt` / `SPEC-locate-workflow.md` / `BUILD-PLAN.md` | Agent + contract docs |
 
@@ -103,7 +110,9 @@ make it yours.
 
 - **Daily:** refresh `watchlist.txt` with the day's gap-up candidates before the open.
 - **History:** `logs/quotes.jsonl` accumulates every outcome; the console's table shows today,
-  and the file is your long-term locate-cost dataset (append-only JSONL, easy to analyze).
+  and the **Locate cost report** card summarizes any period (append-only JSONL, easy to analyze).
+  JSON: `curl 'http://127.0.0.1:8765/api/report?days=30&mode=real'` (`days` = number or `all`;
+  `mode` = `real`, `mock` or `all`).
 - **Thresholds:** edit `rules` in `config.json`; changes apply on next server start.
 - **Model upgrade:** drop a different ggml model into `models/` and update the path in
   `src/voice.py` if you want higher accuracy (small.en) at some speed cost.
@@ -128,6 +137,10 @@ make it yours.
 - "Single Use" locates (Reg SHO threshold symbols) can't be sold back after funding a short.
 - Extended-hours and market-hours behavior of the locate desk isn't documented by TradeZero.
 - Push-to-talk requires the browser tab (or terminal) to have focus.
+- The cost report shows **gross** spend: TradeZero's sell-back response carries no credit
+  amount, so refunds from sell-backs are counted (shares) but not netted out (dollars).
+- Log lines written before the `mode` field existed (very early builds) appear only under
+  the report's **All** mode filter.
 - macOS only (uses `say`, sox/coreaudio, Homebrew).
 
 ## Workarounds
@@ -140,6 +153,8 @@ make it yours.
 - **Single Use locates:** no workaround.
 - **Undocumented session hours:** no workaround; expect quotes mainly during regular sessions.
 - **Push-to-talk focus:** no workaround yet; a global OS-level hotkey is on the roadmap.
+- **Gross report spend:** check sell-back credits in the TradeZero platform statement.
+- **Pre-`mode` log lines:** select **All** in the report's mode filter to include them.
 - **macOS only:** no workaround.
 
 ## Build Notes
@@ -161,4 +176,4 @@ make it yours.
 accounts. This tool never places orders and never accepts a locate without your explicit
 confirmation.*
 
-*Last updated: 2026-10-09*
+*Last updated: 2026-10-12*

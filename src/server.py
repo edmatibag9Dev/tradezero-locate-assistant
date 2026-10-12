@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import report
 import rules
 import voice
 from tz_api import TradeZeroClient, TradeZeroError, STATUS, OFFERED
@@ -269,6 +270,18 @@ class Handler(BaseHTTPRequestHandler):
                         "pending": pending, "busy": BUSY.locked()})
         elif self.path == "/api/history":
             self._json({"history": today_history()})
+        elif self.path.startswith("/api/report"):
+            from urllib.parse import parse_qs, urlparse
+            q = parse_qs(urlparse(self.path).query)
+            raw_days = (q.get("days") or ["7"])[0]
+            mode = (q.get("mode") or ["real"])[0]
+            if mode not in ("real", "mock", "all"):
+                return self._json({"error": "mode must be real, mock or all"}, 400)
+            try:
+                days = None if raw_days == "all" else max(1, int(raw_days))
+            except ValueError:
+                return self._json({"error": "days must be a number or 'all'"}, 400)
+            self._json(report.report(ROOT / CONFIG["log_file"], days, mode))
         elif self.path == "/api/inventory":
             try:
                 self._json({"inventory": CLIENT.inventory()})

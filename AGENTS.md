@@ -36,9 +36,11 @@ locates REST API → rule gate → spoken/web read-back, with every quote logged
 | `src/voice.py` | yes | Mic record (sox), transcription (whisper-cli), command parser. |
 | `src/app.py` | yes | Terminal UI — typed or `--voice` push-to-talk loop. |
 | `src/server.py` | yes | Localhost web console (stdlib http.server) + JSON API. |
+| `src/report.py` | yes | Locate-cost report — pure aggregation of `logs/quotes.jsonl` (no network). |
 | `src/check_keys.py` | yes | Read-only key/config validator (two harmless GETs). |
 | `web/index.html` | yes | Single-page console UI (self-contained; Google Fonts only). |
 | `tests/test_rules.py` | yes | Rule-band boundary tests. |
+| `tests/test_report.py` | yes | Locate-cost report aggregation + filter tests. |
 | `tests/test_voice.py` | yes | Parser tests + TTS→Whisper→parse end-to-end audio tests. |
 | `samples/quotes.sample.jsonl` | yes | Reference log so the repo previews without real data. |
 | `config.json` | **no (gitignored)** | Holds the owner's real account ID. |
@@ -89,6 +91,9 @@ Rules an agent must preserve:
   `cmd` in `app.py` main loop AND `server.py` `flow_listen` — keep both in sync.
 - **New API endpoint:** add a method to `src/tz_api.py` (and mirror it in `mock_api.py` so
   mock mode keeps working; tests rely on the mock).
+- **Cost report:** metrics live in `src/report.py` (`build_report`); add a field there,
+  cover it in `tests/test_report.py`, then render it in the `#report` card of
+  `web/index.html`. The report is read-only over the log — never call the API from it.
 - **UI changes:** `web/index.html` is self-contained (inline CSS/JS, brand tokens in `:root`).
 - **Sell-back sweep** (shipped 1.3.0): `flow_sweep()` in `server.py` / `do_sweep()` in
   `app.py` — extend there for scheduling or filters (e.g. keep symbols still on watch).
@@ -115,7 +120,8 @@ Rules an agent must preserve:
 
 Run before declaring a change done:
 
-1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary).
+1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary);
+   `python3 tests/test_report.py` — 26/26 (cost-report totals, filters, malformed lines).
 2. `python3 tests/test_voice.py` — 27/27 (parser + synthetic TTS→Whisper→parse audio;
    needs `say`, `sox`, `whisper-cli`, and the model present).
 3. Mock CLI round trip: `printf 'locate 500 EXPN\nquit\n' | python3 src/app.py --mock`

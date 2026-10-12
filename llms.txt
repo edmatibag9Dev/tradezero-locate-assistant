@@ -15,6 +15,7 @@
 - [src/rules.py](src/rules.py): approval rule engine — auto-reject / warn / ask bands.
 - [src/voice.py](src/voice.py): sox mic capture, whisper.cpp transcription, command parser.
 - [src/server.py](src/server.py): localhost web console + JSON API.
+- [src/report.py](src/report.py): locate-cost report over logs/quotes.jsonl (GET /api/report).
 - [src/app.py](src/app.py): terminal UI (typed or --voice).
 - [SPEC-locate-workflow.md](SPEC-locate-workflow.md): TradeZero API contract, log schema, rule bands.
 

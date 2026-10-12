@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.4.0] — 2026-10-12
+
+### Added
+- **Locate cost report** in the web console (`#report` card) and as JSON at
+  `GET /api/report?days=1|7|30|all&mode=real|mock|all` (defaults: 7 days, real).
+  Totals: spend, accepted shares, accept rate over priced quotes, share-weighted average
+  $/share paid, auto-rejected count and declined quote value, passed/expired/broker-rejected
+  counts, sell-backs. Per-symbol table sorted by spend. Period and mode choice is remembered
+  per browser (storage failures are ignored).
+- `src/report.py` — pure, stdlib-only aggregation over `logs/quotes.jsonl`; no API calls.
+- `tests/test_report.py` — 26 checks (totals, period and mode filters, empty log,
+  malformed lines, missing file).
+
+### Known limitations
+- Spend is gross: sell-back responses carry no credit amount, so refunds are not netted.
+- Log lines without a `mode` field (earliest builds) appear only under mode=all.
+
 ## [2026-10-09] — Conform to repo standard 2026-10-09
 
 Documentation and ignore rules only; no code change, so no version bump.

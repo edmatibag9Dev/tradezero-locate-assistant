@@ -89,6 +89,27 @@
   #summary { color: var(--muted); font-size: 13px; margin-top: 10px; }
   #summary strong { color: var(--text); font-family: "IBM Plex Mono", monospace; }
   .empty { color: var(--muted); font-size: 14px; padding: 10px 0; }
+
+  .rep-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px;
+              margin-bottom: 12px; }
+  .rep-head h2 { margin-bottom: 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
+         overflow: hidden; }
+  .seg button { background: none; border: 0; padding: 5px 11px; color: var(--muted);
+                font: 600 12px Inter; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--brand); color: #fff; }
+  .rep-head .seg:first-of-type { margin-left: auto; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+          margin-bottom: 14px; }
+  @media (max-width: 420px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi { background: var(--raised); border: 1px solid var(--border); border-radius: 10px;
+         padding: 10px 12px; }
+  .kpi .k { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .06em; }
+  .kpi .v { font: 600 20px "IBM Plex Mono", monospace; margin-top: 2px; }
+  .kpi .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  #rep-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -149,6 +170,30 @@
       </table>
       <div id="summary"></div>
     </div>
+
+    <div class="card" id="report">
+      <div class="rep-head">
+        <h2>Locate cost report</h2>
+        <div class="seg" id="rep-days">
+          <button data-v="1">Today</button><button data-v="7">7 days</button>
+          <button data-v="30">30 days</button><button data-v="all">All</button>
+        </div>
+        <div class="seg" id="rep-mode">
+          <button data-v="real">Real</button><button data-v="mock">Mock</button>
+          <button data-v="all">All</button>
+        </div>
+      </div>
+      <div class="kpis" id="rep-kpis"></div>
+      <table>
+        <thead><tr>
+          <th>Symbol</th><th class="num">Requests</th><th class="num">Accepted</th>
+          <th class="num">Shares</th><th class="num">Spend</th><th class="num">Avg paid/sh</th>
+          <th class="num">Quoted range/sh</th>
+        </tr></thead>
+        <tbody id="rep-sym"></tbody>
+      </table>
+      <div id="rep-note"></div>
+    </div>
   </div>
 </div>
 
@@ -202,6 +247,62 @@ async function refreshHistory() {
     `<strong>${money(spent)}</strong> spent on locates`;
 }
 
+// --- locate cost report (reads logs/quotes.jsonl via /api/report) ---------
+const REP = { days: "7", mode: "real" };
+try {  // remembered per browser; storage can be blocked — page works without it
+  const saved = JSON.parse(localStorage.getItem("tzRep") || "{}");
+  if (saved.days) REP.days = saved.days;
+  if (saved.mode) REP.mode = saved.mode;
+} catch {}
+
+function segInit(id, key) {
+  const seg = $(id);
+  const paint = () => seg.querySelectorAll("button").forEach(b =>
+    b.classList.toggle("on", b.dataset.v === REP[key]));
+  seg.querySelectorAll("button").forEach(b => b.onclick = () => {
+    REP[key] = b.dataset.v; paint();
+    try { localStorage.setItem("tzRep", JSON.stringify(REP)); } catch {}
+    refreshReport();
+  });
+  paint();
+}
+
+function kpi(label, value, sub) {
+  return `<div class="kpi"><div class="k">${label}</div><div class="v">${value}</div>` +
+         (sub ? `<div class="s">${sub}</div>` : "") + `</div>`;
+}
+
+async function refreshReport() {
+  let r;
+  try { r = await api(`/api/report?days=${REP.days}&mode=${REP.mode}`); }
+  catch { $("rep-note").textContent = "Report unavailable."; return; }
+  if (r.error) { $("rep-note").textContent = r.error; return; }
+  const t = r.totals;
+  const pct = t.accept_rate == null ? "—" : Math.round(t.accept_rate * 100) + "%";
+  $("rep-kpis").innerHTML =
+    kpi("Spent on locates", money(t.spend), `${t.accepted_shares} shares`) +
+    kpi("Accepted", t.accepted, `${pct} of ${t.priced} priced`) +
+    kpi("Avg paid / share", t.avg_rate == null ? "—" : rateFmt(t.avg_rate)) +
+    kpi("Auto-rejected", t.auto_rejected, `${money(t.rejected_value)} declined`) +
+    kpi("Passed · expired", `${t.passed} · ${t.expired}`,
+        t.broker_rejected ? `${t.broker_rejected} broker-rejected` : "") +
+    kpi("Sold back", t.sellbacks, `${t.sellback_shares} shares`);
+  const tb = $("rep-sym");
+  tb.innerHTML = r.by_symbol.length ? r.by_symbol.map(s => `<tr>
+      <td><strong>${s.symbol}</strong></td>
+      <td class="num">${s.requests}</td><td class="num">${s.accepted}</td>
+      <td class="num">${s.shares}</td><td class="num">${money(s.spend)}</td>
+      <td class="num">${s.avg_rate == null ? "—" : rateFmt(s.avg_rate)}</td>
+      <td class="num">${s.min_rate == null ? "—" : s.min_rate === s.max_rate
+          ? rateFmt(s.min_rate) : rateFmt(s.min_rate) + "–" + rateFmt(s.max_rate)}</td>
+    </tr>`).join("")
+    : `<tr><td colspan="7" class="empty">No ${REP.mode === "all" ? "" : REP.mode + " "}locate activity in this period.</td></tr>`;
+  const span = r.first_day ? (r.first_day === r.last_day ? r.first_day
+               : `${r.first_day} → ${r.last_day}`) : "no data";
+  $("rep-note").textContent = `${t.requests} requests · ${span} · ` +
+    "Sell-back refunds aren't in the log, so spend is gross.";
+}
+
 async function refreshInventory() {
   try {
     const { inventory } = await api("/api/inventory");
@@ -245,7 +346,7 @@ function setBusy(b, label) {
 
 async function handleResult(res) {
   if (res.heard) $("heard").textContent = "heard: “" + res.heard + "”";
-  await Promise.all([pollState(), refreshHistory()]);
+  await Promise.all([pollState(), refreshHistory(), refreshReport()]);
   if (["accepted", "sellback_sent"].includes(res.status)) refreshInventory();
   if (res.status === "offered") listen("answer");   // mic reopens for accept/pass
   if (res.status === "say_accept_or_pass") listen("answer");
@@ -299,9 +400,11 @@ document.addEventListener("keydown", e => {
   else if (e.key === "/") { e.preventDefault(); $("cmd").focus(); }
 });
 
-pollState(); refreshHistory(); refreshInventory();
+segInit("rep-days", "days"); segInit("rep-mode", "mode");
+pollState(); refreshHistory(); refreshInventory(); refreshReport();
 setInterval(pollState, 1000);
 setInterval(refreshHistory, 5000);
+setInterval(refreshReport, 15000);
 </script>
 </body>
 </html>
