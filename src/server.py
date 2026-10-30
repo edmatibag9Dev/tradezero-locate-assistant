@@ -214,8 +214,8 @@ def flow_sweep() -> dict:
     if not results:
         say("Nothing to sweep — no unused locate shares.")
         return {"status": "nothing_to_sweep", "results": []}
-    msg = f"Sweep sent — {swept_shares} shares across " \
-          f"{sum(1 for x in results if x['ok'])} symbols."
+    msg = f"Sell-back sent for {swept_shares} shares across " \
+          f"{sum(1 for x in results if x['ok'])} symbols. TradeZero still has to process it."
     if failed:
         msg += f" Failed: {', '.join(failed)}."
     say(msg)
@@ -244,7 +244,8 @@ def today_history() -> list[dict]:
 
 PLATFORM_TTL_S = 15
 CASH_TTL_S = 300
-SETTLED = {"ACCEPTED", "SELLBACK_SENT", "CANCELED", "Rejected", "EXPIRED_UNANSWERED"}
+SETTLED = {"ACCEPTED", "SELLBACK_SENT", "SELLBACK_FAILED", "SELLBACK_PENDING",
+           "CANCELED", "Rejected", "EXPIRED_UNANSWERED"}  # pending sells kept: they can settle after the day rolls
 _platform_cache: dict = {"at": 0.0, "rows": [], "error": None}
 _cash_cache: dict = {}
 _saved_platform: set | None = None
@@ -292,8 +293,9 @@ def merged_today() -> dict:
     log_rows = today_history()
     plat, err = platform_today()
     today = time.strftime("%Y-%m-%d")
-    plat = [r for r in plat if r.get("ts", "").startswith(today)]
-    rows = report.merge_rows(log_rows, plat)
+    saved = report.normalize_saved(report.load_rows(platform_log_path()))
+    acct = [r for r in saved + plat if r.get("ts", "").startswith(today)]
+    rows = report.merge_rows(log_rows, acct)
     rows.sort(key=lambda r: r.get("ts", ""), reverse=True)
     return {"history": rows, "platform_error": err}
 
@@ -361,7 +363,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "days must be a number or 'all'"}, 400)
             plat, _ = platform_today()
             saved = report.normalize_saved(report.load_rows(platform_log_path()))
-            extra = report.merge_rows(saved, plat)
+            extra = saved + plat  # merge_rows picks the latest state per request
             out = report.report(ROOT / CONFIG["log_file"], days, mode,
                                 extra_rows=extra)
             out["account"] = account_cash(days)

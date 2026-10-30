@@ -161,7 +161,7 @@ def run() -> None:
          "text": "Accept is already pending for account ACCT123 and symbol TNMG."},
     ], "real")
     check("sell rows: filled / rejected / queued",
-          [r["result"] for r in sells[:3]], ["SELLBACK_SENT", "SELLBACK_FAILED", "PENDING"])
+          [r["result"] for r in sells[:3]], ["SELLBACK_SENT", "SELLBACK_FAILED", "SELLBACK_PENDING"])
     check("account ID scrubbed from broker text", "ACCT123" in sells[3]["detail"], False)
     check("scrub without known ID", report.scrub("pending for account 9XY99 and", None),
           "pending for account … and")
@@ -178,6 +178,38 @@ def run() -> None:
                                      "detail": "pending for account 9XY99 and symbol", "source": "platform"}])
     check("normalize_saved: ts + scrub", (saved[0]["ts"].endswith("Z"), "9XY99" in saved[0]["detail"]),
           (False, False))
+
+    # --- sell-back lifecycle: sent -> pending (48 New) -> processed (50) ---------
+    def sell(qid, sym, status, ts="2026-10-30T18:57:00Z"):
+        return report.platform_rows([{"symbol": sym, "quoteReqID": qid, "locateShares": -100,
+                                      "locateStatus": status, "locatePrice": 0,
+                                      "createdDate": ts}], "real")[0]
+    app = [{"symbol": "ONEG", "qty": 100, "quoteReqID": "S-A", "result": "SELLBACK_FAILED",
+            "ts": "2026-10-30T11:56:56-0700", "mode": "real"},      # logged by the 1.5.1 bug
+           {"symbol": "TNMG", "qty": 100, "quoteReqID": "S-B", "result": "SELLBACK_SENT",
+            "ts": "2026-10-30T11:56:56-0700", "mode": "real"},      # ack only
+           {"symbol": "ZZZ", "qty": 100, "quoteReqID": "S-C", "result": "SELLBACK_FAILED",
+            "ts": "2026-10-30T11:56:56-0700", "mode": "real"}]      # never reached TradeZero
+    res = {r["quoteReqID"]: r["result"] for r in report.merge_rows(app, [sell("S-A", "ONEG", 48)])}
+    check("app 'failed' but account queued -> pending", res["S-A"], "SELLBACK_PENDING")
+    check("app ack, no account row yet -> pending", res["S-B"], "SELLBACK_PENDING")
+    check("app failed, no account row -> stays failed", res["S-C"], "SELLBACK_FAILED")
+    res2 = {r["quoteReqID"]: r["result"] for r in
+            report.merge_rows(app, [sell("S-A", "ONEG", 48), sell("S-A", "ONEG", 50),
+                                    sell("S-B", "TNMG", 50), sell("S-B", "TNMG", 48)])}
+    check("saved pending + later filled -> processed", res2["S-A"], "SELLBACK_SENT")
+    check("filled is not undone by a stale pending row", res2["S-B"], "SELLBACK_SENT")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "q.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in app) + "\n")
+        rt = report.report(p, None, "real", TODAY, extra_rows=[sell("S-A", "ONEG", 48)])["totals"]
+        check("report: nothing counted as sold back while pending", rt["sellbacks"], 0)
+        check("report: pending sell-backs and shares",
+              (rt["sellback_pending"], rt["sellback_pending_shares"]), (2, 200))
+        rt2 = report.report(p, None, "real", TODAY,
+                            extra_rows=[sell("S-A", "ONEG", 50), sell("S-B", "TNMG", 50)])["totals"]
+        check("report: processed sell-backs", (rt2["sellbacks"], rt2["sellback_shares"],
+                                               rt2["sellback_pending"]), (2, 200, 0))
 
     cash = [
         {"cashType": "Locate Fees", "deposit": 0, "withdraw": 2.0, "entryDate": "2026-10-29T00:00:00"},

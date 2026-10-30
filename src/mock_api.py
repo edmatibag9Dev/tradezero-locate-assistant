@@ -20,6 +20,7 @@ import time
 from tz_api import OFFERED
 
 FIXED = {"CHEP": 0.004, "MIDD": 0.05, "WARN": 0.12, "EXPN": 0.35}
+MOCK_SELL_DELAY_S = 20  # a sell-back sits at 48 New this long, then 50 Filled
 
 
 class MockTradeZeroClient:
@@ -36,8 +37,9 @@ class MockTradeZeroClient:
             "locatePrice": 0.015, "text": "",
             "createdDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 3600)),
         }]
-        self._inventory["PLAT"] = {"symbol": "PLAT", "located": 200,
-                                   "available": 200, "spent": 3.0}
+        self._inventory["PLAT"] = {"symbol": "PLAT", "located": 200, "available": 200,
+                                   "toBeSold": 0, "sold": 0, "spent": 3.0}
+        self._sells: list[dict] = []
 
     def _rate_for(self, symbol: str) -> float:
         if symbol in FIXED:
@@ -66,7 +68,8 @@ class MockTradeZeroClient:
             return {"locateAcceptSent": "false", "text": "quote expired"}
         sym = q["symbol"]
         inv = self._inventory.setdefault(
-            sym, {"symbol": sym, "located": 0, "available": 0, "spent": 0.0})
+            sym, {"symbol": sym, "located": 0, "available": 0, "toBeSold": 0,
+                  "sold": 0, "spent": 0.0})
         inv["located"] += q["locateShares"]
         inv["available"] += q["locateShares"]
         inv["spent"] = round(inv["spent"] + q["locatePrice"] * q["locateShares"], 2)
@@ -78,9 +81,25 @@ class MockTradeZeroClient:
             self._quotes[quote_req_id]["finalStatus"] = 52
         return {"locateCancelSent": "true"}
 
+    def _process_sells(self) -> None:
+        """TradeZero processes sell-backs asynchronously: New (48) → Filled (50)."""
+        now = time.time()
+        for s in self._sells:
+            if s["status"] == 48 and now - s["at"] >= MOCK_SELL_DELAY_S:
+                s["status"] = 50
+                inv = self._inventory[s["symbol"]]
+                inv["toBeSold"] -= s["qty"]
+                inv["sold"] += s["qty"]
+
     def locate_history(self) -> list[dict]:
         """Today's account-wide locate rows, TradeZero field names."""
+        self._process_sells()
         rows = list(self._platform)
+        for s in self._sells:
+            rows.append({"symbol": s["symbol"], "quoteReqID": s["id"],
+                         "locateShares": -s["qty"], "locateType": 1,
+                         "locateStatus": s["status"], "locatePrice": 0, "text": None,
+                         "createdDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(s["at"]))})
         for q in self._quotes.values():
             rows.append({"symbol": q["symbol"], "quoteReqID": q["quoteReqID"],
                          "locateShares": q["locateShares"], "locateType": 1,
@@ -104,13 +123,16 @@ class MockTradeZeroClient:
         ]
 
     def inventory(self) -> list[dict]:
+        self._process_sells()
         return list(self._inventory.values())
 
     def sell_back(self, symbol: str, quantity: int, quote_req_id: str,
                   locate_type: str = "Locate") -> dict:
         inv = self._inventory.get(symbol.upper())
         if inv and inv["available"] >= quantity:
-            inv["available"] -= quantity
-            inv["located"] -= quantity
+            inv["available"] -= quantity          # queued, not yet processed
+            inv["toBeSold"] += quantity
+            self._sells.append({"id": quote_req_id, "symbol": symbol.upper(),
+                                "qty": quantity, "status": 48, "at": time.time()})
             return {"locateSellbackSent": "true"}  # documented field name
         return {"locateSellbackSent": "false", "text": "insufficient available shares"}

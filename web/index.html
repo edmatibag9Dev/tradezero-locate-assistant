@@ -228,6 +228,7 @@ function badge(result) {
     Rejected: ["b-rej", "broker rejected"], ACCEPT_FAILED: ["b-rej", "accept failed"],
     PASSED: ["b-pass", "passed"], EXPIRED_UNANSWERED: ["b-warn", "expired"],
     NO_QUOTE: ["b-warn", "no quote"], SELLBACK_SENT: ["b-info", "sold back"],
+    SELLBACK_PENDING: ["b-warn", "sell-back pending"],
     SELLBACK_FAILED: ["b-rej", "sellback failed"],
     CANCELED: ["b-pass", "canceled"], OFFERED: ["b-info", "offered"],
     PENDING: ["b-warn", "pending"],
@@ -253,7 +254,7 @@ async function refreshHistory() {
       <td>${badge(h.result || "")}</td></tr>`;
   }
   $("summary").innerHTML = (platform_error ? `<div class="warnline">${platform_error}</div>` : "") +
-    `<strong>${history.length}</strong> quotes today · ` +
+    `<strong>${history.filter(h => !String(h.result || "").startsWith("SELLBACK")).length}</strong> quotes today · ` +
     `<strong>${accepted}</strong> accepted · ` +
     `<strong>${money(spent)}</strong> spent on locates`;
 }
@@ -305,7 +306,9 @@ async function refreshReport() {
     kpi("Auto-rejected", t.auto_rejected, `${money(t.rejected_value)} declined`) +
     kpi("Passed · expired", `${t.passed} · ${t.expired}`,
         t.broker_rejected ? `${t.broker_rejected} broker-rejected` : "") +
-    kpi("Sold back", t.sellbacks, `${t.sellback_shares} shares`);
+    kpi("Sold back (processed)", t.sellbacks, `${t.sellback_shares} shares` +
+        (t.sellback_pending ? ` · ${t.sellback_pending_shares} pending` : "") +
+        (t.sellback_failed ? ` · ${t.sellback_failed} failed` : ""));
   const tb = $("rep-sym");
   tb.innerHTML = r.by_symbol.length ? r.by_symbol.map(s => `<tr>
       <td><strong>${s.symbol}</strong></td>
@@ -328,7 +331,9 @@ async function refreshInventory() {
     const { inventory } = await api("/api/inventory");
     $("inv").innerHTML = (inventory && inventory.length)
       ? inventory.map(i => `<div><strong>${i.symbol}</strong>
-          <span class="num">${i.available ?? i.locateShares ?? "?"}</span> available</div>`).join("")
+          <span class="num">${i.available ?? i.locateShares ?? "?"}</span> available${
+            i.toBeSold ? ` · <span class="num" style="color:var(--warn-text)">${i.toBeSold}</span> sell-back pending` : ""}${
+            i.sold ? ` · <span class="num">${i.sold}</span> sold back` : ""}</div>`).join("")
       : "No locates held.";
   } catch { $("inv").textContent = "unavailable"; }
 }
@@ -392,7 +397,7 @@ async function sweep() {
   try {
     const res = await api("/api/sweep", {});
     $("heard").textContent = res.status === "swept"
-      ? `swept ${res.swept_shares} shares`
+      ? `sell-back sent for ${res.swept_shares} shares — pending until TradeZero processes it`
       : res.status.replaceAll("_", " ");
     await Promise.all([refreshHistory(), refreshInventory()]);
   } finally { setBusy(false); }
@@ -427,6 +432,7 @@ pollState(); refreshHistory(); refreshInventory(); refreshReport();
 setInterval(pollState, 1000);
 setInterval(refreshHistory, 5000);
 setInterval(refreshReport, 15000);
+setInterval(refreshInventory, 15000);
 </script>
 </body>
 </html>

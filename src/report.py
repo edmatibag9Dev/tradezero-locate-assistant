@@ -11,9 +11,10 @@ Definitions (all from the log's own fields; nothing is estimated):
 - avg_rate      spend / accepted shares (share-weighted $/share actually paid)
 - rejected_value  sum of `total` on AUTO_REJECT rows — quote value the rule
                   declined (what accepting those quotes would have cost)
-- sellbacks     SELLBACK_SENT rows and shares; the refund amount is NOT in the
-                log (TradeZero's sell response carries no credit figure), so
-                no credit dollars are reported
+- sellbacks     sell-backs TradeZero has PROCESSED (history status 50 Filled)
+- sellback_pending  sell-backs sent but not yet processed (status 48 New, or
+                acknowledged by the app with no account confirmation yet)
+- credit dollars come only from the cash ledger (cash_summary), never the log
 """
 
 from __future__ import annotations
@@ -23,7 +24,11 @@ import json
 import re
 from pathlib import Path
 
-SELLBACK = {"SELLBACK_SENT", "SELLBACK_FAILED"}
+# SELLBACK_SENT in the app log means "TradeZero acknowledged the request".
+# After merging with account history it means "processed". Unconfirmed app rows
+# become SELLBACK_PENDING (see merge_rows).
+SELLBACK = {"SELLBACK_SENT", "SELLBACK_FAILED", "SELLBACK_PENDING"}
+IN_FLIGHT = {"OFFERED", "PENDING", "SELLBACK_PENDING"}
 BROKER_REJECTED = {"Rejected", "NO_QUOTE"}
 
 
@@ -72,6 +77,7 @@ def build_report(rows: list[dict]) -> dict:
          "spend": 0.0, "auto_rejected": 0, "rejected_value": 0.0, "passed": 0,
          "expired": 0, "broker_rejected": 0, "accept_failed": 0,
          "sellbacks": 0, "sellback_shares": 0, "sellback_failed": 0,
+         "sellback_pending": 0, "sellback_pending_shares": 0,
          "canceled": 0, "from_platform": 0}
     syms: dict[str, dict] = {}
 
@@ -86,6 +92,9 @@ def build_report(rows: list[dict]) -> dict:
             if res == "SELLBACK_SENT":
                 t["sellbacks"] += 1
                 t["sellback_shares"] += qty
+            elif res == "SELLBACK_PENDING":
+                t["sellback_pending"] += 1
+                t["sellback_pending_shares"] += qty
             else:
                 t["sellback_failed"] += 1
             continue
@@ -151,7 +160,7 @@ def report(path: Path, days: int | None, mode: str,
     """extra_rows: account rows (today's platform history + saved platform
     log). Only settled outcomes count; in-flight rows are dropped."""
     extra = [r for r in (extra_rows or [])
-             if r.get("result") not in ("OFFERED", "PENDING")]
+             if r.get("result") not in ("OFFERED", "PENDING")]  # sell-back pending kept
     rows = filter_rows(merge_rows(load_rows(path), extra), days, mode, today)
     out = build_report(rows)
     out.update({"days": days, "mode": mode})
@@ -231,7 +240,9 @@ def platform_rows(history: list[dict], mode: str) -> list[dict]:
         shares = int(h.get("locateShares") or h.get("filledShares") or 0)
         rate = h.get("locatePrice")
         rate = float(rate) if rate not in (None, "") and float(rate) > 0 else None
-        if shares < 0 and status == 50:
+        if shares < 0 and status in (48, 54, 81):
+            result = "SELLBACK_PENDING"         # queued: TradeZero hasn't processed it
+        elif shares < 0 and status == 50:
             result = "SELLBACK_SENT"            # processed: credit issued
         elif shares < 0 and status == 56:
             result = "SELLBACK_FAILED"          # e.g. "16 Insufficient shares."
@@ -252,26 +263,51 @@ def platform_rows(history: list[dict], mode: str) -> list[dict]:
     return out
 
 
+def latest_account(rows: list[dict]) -> list[dict]:
+    """One account row per request. A final state beats an in-flight one
+    (Filled beats New); between equals the later row in the list wins, so pass
+    saved rows first and live rows last."""
+    best: dict[str, dict] = {}
+    order: list = []
+    for r in rows:
+        qid = base_req_id(r.get("quoteReqID", ""))
+        if not qid:
+            order.append(r)
+            continue
+        cur = best.get(qid)
+        if cur is None:
+            order.append(qid)
+        elif r.get("result") in IN_FLIGHT and cur.get("result") not in IN_FLIGHT:
+            continue
+        best[qid] = r
+    return [best[x] if isinstance(x, str) else x for x in order]
+
+
 def merge_rows(log_rows: list[dict], extra: list[dict]) -> list[dict]:
-    """Add account rows the app didn't log itself. The app's own row wins for
-    any quoteReqID it already logged (it carries the rule outcome: AUTO_REJECT
-    vs PASSED). Rows without a quoteReqID are always kept."""
-    SELL = ("SELLBACK_SENT", "SELLBACK_FAILED")
-    settled_sell = {base_req_id(r.get("quoteReqID", "")): r for r in extra
-                    if r.get("quoteReqID") and r.get("result") in SELL + ("CANCELED",)
-                    and r.get("source") == "platform"}
+    """Combine the app's own rows with account rows (TradeZero history).
+
+    Quotes: the app's row wins for a quoteReqID it logged (it knows AUTO_REJECT
+    vs PASSED). Sell-backs: the account's state wins — the app only knows that
+    TradeZero acknowledged the request. An acknowledged sell-back with no
+    account row yet shows as SELLBACK_PENDING. Rows without an ID are kept.
+    """
+    acct = latest_account(extra)
+    by_id = {base_req_id(r["quoteReqID"]): r for r in acct if r.get("quoteReqID")}
     merged, seen = [], set()
     for r in log_rows:
         qid = base_req_id(r.get("quoteReqID", ""))
-        if qid and r.get("result") in SELL and qid in settled_sell:
-            acct = settled_sell[qid]
-            r = {**r, "result": acct["result"], "settled_by": "account"}
-            if acct.get("detail"):
-                r["detail"] = acct["detail"]
+        if r.get("result") in ("SELLBACK_SENT", "SELLBACK_FAILED"):
+            a = by_id.get(qid) if qid else None
+            if a and a.get("result") in SELLBACK | {"CANCELED"}:
+                r = {**r, "result": a["result"], "settled_by": "account"}
+                if a.get("detail"):
+                    r["detail"] = a["detail"]
+            elif r["result"] == "SELLBACK_SENT":
+                r = {**r, "result": "SELLBACK_PENDING", "unconfirmed": True}
         if qid:
             seen.add(qid)
         merged.append(r)
-    for r in extra:
+    for r in acct:
         qid = base_req_id(r.get("quoteReqID", ""))
         if qid and qid in seen:
             continue

@@ -68,8 +68,11 @@ Rules an agent must preserve:
 - Append-only; never rewrite or dedupe historical lines.
 - API keys and account IDs must never appear in log lines. Broker `text` can name the
   account ("…pending for account <id>…") — pass it through `report.scrub()` before logging.
-- Sell-back success field is `locateSellbackSent` (use `tz_api.sellback_ok()`); the final
-  outcome arrives later in `/locates/history` (Filled / Rejected 16 "Insufficient shares").
+- Sell-back success field is `locateSellbackSent` (use `tz_api.sellback_ok()`). That is only an
+  acknowledgement: in quotes.jsonl `SELLBACK_SENT` = acknowledged. The outcome arrives later in
+  `/locates/history` (48 New → 50 Filled, or 56 Rejected / 52 Canceled). After
+  `report.merge_rows`, `SELLBACK_PENDING` = not yet processed, `SELLBACK_SENT` = processed.
+  For sell-backs the account's state always wins over the app's row.
 - `logs/platform_locates.jsonl` (account rows, `"source": "platform"`) uses the same fields;
   its extra result value is `CANCELED`. One line per (`quoteReqID`, `result`); append-only.
 
@@ -131,7 +134,7 @@ Rules an agent must preserve:
 Run before declaring a change done:
 
 1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary);
-   `python3 tests/test_report.py` — 57/57 (cost-report totals, filters, account rows, cash ledger,
+   `python3 tests/test_report.py` — 65/65 (cost-report totals, filters, account rows, cash ledger,
    sell-back ack, timestamps, account-ID scrub). Run on **Python 3.9** too — the Mac Studio's
    launchd job uses `/usr/bin/python3` (3.9).
 2. `python3 tests/test_voice.py` — 33/33 (parser + synthetic TTS→Whisper→parse audio;

@@ -5,6 +5,31 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.6.0] — 2026-10-30
+
+### Added
+- **Sell-back lifecycle.** Sell-backs show **sell-back pending** until TradeZero's locate
+  history reports them processed (sold back) or rejected/canceled (sellback failed + reason).
+  New result value `SELLBACK_PENDING` (account status 48/54/81 on a negative-share row, or an
+  app-acknowledged sell-back with no account record yet).
+- Inventory card shows available · sell-back pending (`toBeSold`) · sold back (`sold`), and
+  refreshes every 15 s.
+- Report: **Sold back (processed)** tile counts only processed sell-backs; pending shares and
+  failures listed underneath. Totals gain `sellback_pending`, `sellback_pending_shares`.
+- Mock client queues sell-backs (48 New) and processes them after 20 s, like TradeZero.
+- 8 new report tests (65 total), run on Python 3.9 and 3.13.
+
+### Fixed
+- An acknowledged sell-back was counted as sold back before TradeZero processed it.
+- A sell-back pending at TradeZero kept showing the app's earlier status (e.g. the
+  "sellback failed" rows written by the 1.5.1 bug).
+- Pending sell-back rows are now saved too, and the latest state per request wins
+  (Filled beats New), so a sell processed after midnight still settles.
+- Today's summary no longer counts sell-back rows as quotes.
+
+### Changed
+- Sweep message: "Sell-back sent for N shares … TradeZero still has to process it."
+
 ## [1.5.2] — 2026-10-30
 
 ### Fixed

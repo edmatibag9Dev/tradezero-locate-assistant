@@ -57,6 +57,12 @@ make it yours.
   ("Sell back all unused", hotkey `S`), voice (*"sell back everything"* / *"sweep"*), or the
   CLI `sweep` command. Per-symbol results reported; failures (e.g. Single Use tied to a
   short) named individually.
+- **Sell-back status** — TradeZero processes sell-backs asynchronously. A sell-back shows as
+  **sell-back pending** until TradeZero's locate history reports it processed (**sold back**)
+  or rejected/canceled (**sellback failed**, with the reason). The inventory card shows, per
+  symbol, shares available · sell-back pending (`toBeSold`) · sold back (`sold`), refreshed
+  every 15 s. The report's **Sold back (processed)** tile counts only processed sell-backs and
+  lists pending shares separately; credit dollars come only from the cash ledger.
 - **Mock mode** — practice the entire flow with zero risk and no API keys.
 - **Terminal UI** — the same flows work in a plain CLI (`src/app.py`), typed or voice.
 
@@ -152,6 +158,9 @@ make it yours.
 - "Single Use" locates (Reg SHO threshold symbols) can't be sold back after funding a short.
 - Extended-hours and market-hours behavior of the locate desk isn't documented by TradeZero.
 - Push-to-talk requires the browser tab (or terminal) to have focus.
+- A sell-back acknowledged on a day the console wasn't polling TradeZero has no account
+  record, so it stays **sell-back pending** in the history (the cash ledger still shows the
+  credit).
 - One-letter tickers (e.g. F, T, X) are ignored by voice and by the console's command box
   unless they are on `watchlist.txt` — they are usually Whisper mishearings.
 - Request stats show spend **before** sell-back credits; the account row shows the net, but
