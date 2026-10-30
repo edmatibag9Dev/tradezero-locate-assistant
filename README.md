@@ -40,7 +40,8 @@ make it yours.
   dollars spent, accepted count and accept rate, average $/share actually paid, auto-rejected
   count with the quote value declined, passed/expired counts, sell-backs, and a per-symbol
   table (requests, accepted, shares, spend, avg paid, quoted range). Period: Today / 7 days /
-  30 days / All; mode: Real / Mock / All (defaults to Real, last 7 days). Reads only the
+  30 days / All; mode: Real / All (defaults to Real, last 7 days; All adds old
+  practice-mode rows). The JSON API still accepts `mode=mock`. Reads only the
   local log — no API calls, no cost. Also available as JSON at `GET /api/report`.
 - **Account-wide locates** — the console reads your TradeZero account (read-only), so locates
   taken in ZeroPro or any other front end show in **Today's locates** (tagged `ACCT`) and count

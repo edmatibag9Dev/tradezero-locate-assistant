@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.5.1] — 2026-10-30
+
+### Changed
+- Removed the **Mock** filter from the cost report card (the console runs on live data).
+  Filters are now Real / All; a remembered "mock" choice falls back to Real.
+  `GET /api/report?mode=mock` still works for practice-mode testing.
+
 ## [1.5.0] — 2026-10-30
 
 ### Added

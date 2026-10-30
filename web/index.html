@@ -185,8 +185,7 @@
           <button data-v="30">30 days</button><button data-v="all">All</button>
         </div>
         <div class="seg" id="rep-mode">
-          <button data-v="real">Real</button><button data-v="mock">Mock</button>
-          <button data-v="all">All</button>
+          <button data-v="real">Real</button><button data-v="all">All</button>
         </div>
       </div>
       <div class="rep-sub">TradeZero account — posted locate money</div>
@@ -264,7 +263,7 @@ const REP = { days: "7", mode: "real" };
 try {  // remembered per browser; storage can be blocked — page works without it
   const saved = JSON.parse(localStorage.getItem("tzRep") || "{}");
   if (saved.days) REP.days = saved.days;
-  if (saved.mode) REP.mode = saved.mode;
+  if (saved.mode === "real" || saved.mode === "all") REP.mode = saved.mode;  // "mock" retired
 } catch {}
 
 function segInit(id, key) {
