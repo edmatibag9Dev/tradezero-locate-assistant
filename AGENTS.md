@@ -73,7 +73,8 @@ Rules an agent must preserve:
 1. **Input** (native Mac): push-to-talk records mic via sox `rec` until ~1.4 s silence;
    `whisper-cli` (base.en, on-device) transcribes; `voice.parse_command` maps to
    locate/accept/pass/inventory/sellback, merging spelled tickers ("F R S X"→"FRSX"),
-   parsing number words, fuzzy-matching `watchlist.txt`.
+   parsing number words, fuzzy-matching `watchlist.txt`. One-letter tickers are dropped
+   unless on the watchlist (Whisper turns garbled audio into "I"/"A"); the user is asked again.
 2. **Quote**: POST `/v1/api/accounts/locates/quote` (share count rounded up to a 100-multiple),
    then poll `/locates/history` (2 s + up to 4×2 s) until status 65 Offered or terminal.
 3. **Rule gate** (`rules.py`): rate ≥ auto_reject threshold → cancel immediately, log, speak;
@@ -122,7 +123,7 @@ Run before declaring a change done:
 
 1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary);
    `python3 tests/test_report.py` — 26/26 (cost-report totals, filters, malformed lines).
-2. `python3 tests/test_voice.py` — 27/27 (parser + synthetic TTS→Whisper→parse audio;
+2. `python3 tests/test_voice.py` — 33/33 (parser + synthetic TTS→Whisper→parse audio;
    needs `say`, `sox`, `whisper-cli`, and the model present).
 3. Mock CLI round trip: `printf 'locate 500 EXPN\nquit\n' | python3 src/app.py --mock`
    → EXPN auto-rejects.

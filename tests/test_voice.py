@@ -53,6 +53,13 @@ cases = [
     ("quit", {"cmd": "quit"}),
     ("locate FRSX", {"cmd": "unknown"}),          # no quantity
     ("locate 500", {"cmd": "unknown"}),           # no ticker
+    # lone letters are mishearings unless on the watchlist (Oct 13 / Oct 22 "I" quotes)
+    ("Locate 100 shares of I.", {"cmd": "unknown"}),
+    ("locate 100 A", {"cmd": "unknown"}),
+    ("locate 100 shares of X", {"cmd": "unknown"}),
+    ("I want to locate 200 shares of FRSX", {"cmd": "locate", "qty": 200, "symbol": "FRSX"}),
+    ("locate 300 MVIS", {"cmd": "locate", "qty": 300, "symbol": "MVIS"}),  # off-watchlist, 4 letters
+    ("sell back 100 I", {"cmd": "unknown"}),
     ("what a nice day", {"cmd": "unknown"}),
 ]
 for text, want in cases:

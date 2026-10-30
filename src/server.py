@@ -179,7 +179,9 @@ def flow_listen(context: str) -> dict:
         return {**out, **flow_sweep()}
     if parsed["cmd"] == "inventory":
         return {**out, "status": "inventory", "inventory": CLIENT.inventory()}
-    return {**out, "status": "not_understood"}
+    hint = parsed.get("hint", "")
+    say(f"Didn't catch that{': ' + hint if hint else ''}. Try again.")
+    return {**out, "status": "not_understood", "hint": hint}
 
 
 def flow_sweep() -> dict:
@@ -319,7 +321,8 @@ class Handler(BaseHTTPRequestHandler):
                                "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
                     self._json({"status": "sellback_sent" if ok else "sellback_failed"})
                 else:
-                    self._json({"status": "not_understood", "parsed": parsed})
+                    self._json({"status": "not_understood", "parsed": parsed,
+                                "hint": parsed.get("hint", "")})
             elif self.path == "/api/accept":
                 self._json(flow_answer(True))
             elif self.path == "/api/pass":

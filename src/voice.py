@@ -126,14 +126,18 @@ def extract_ticker(tokens: list[str], watchlist: list[str]) -> str | None:
         if len(t) == 1 and t not in ("A", "I"):
             run += t
         else:
-            if len(run) >= 2:
+            if run:
                 joined.append(run)
             run = ""
             joined.append(t)
-    if len(run) >= 2:
+    if run:
         joined.append(run)
 
     candidates = [t for t in joined if 1 <= len(t) <= 5 and t not in STOPWORDS]
+    # A lone letter is almost always a mishearing (Whisper turns garbled or
+    # near-silent audio into "I" or "A"). Keep one-letter tickers only when they
+    # are on the watchlist; otherwise report no ticker so the user is asked again.
+    candidates = [t for t in candidates if len(t) > 1 or t in watchlist]
     if not candidates:
         return None
     if watchlist:
@@ -187,7 +191,8 @@ def parse_command(text: str, watchlist: list[str] | None = None) -> dict:
                     "hint": "no share quantity heard"}
         ticker = extract_ticker(rest, watchlist)
         if not ticker:
-            return {"cmd": "unknown", "text": raw, "hint": "no ticker heard"}
+            return {"cmd": "unknown", "text": raw,
+                    "hint": "ticker unclear — spell it, like F R S X"}
         return {"cmd": "sellback" if sellback else "locate",
                 "qty": qty, "symbol": ticker}
 

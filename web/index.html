@@ -346,6 +346,8 @@ function setBusy(b, label) {
 
 async function handleResult(res) {
   if (res.heard) $("heard").textContent = "heard: “" + res.heard + "”";
+  if (res.status === "not_understood")
+    $("heard").textContent += (res.heard ? " — " : "") + (res.hint || "not understood") + ". Try again.";
   await Promise.all([pollState(), refreshHistory(), refreshReport()]);
   if (["accepted", "sellback_sent"].includes(res.status)) refreshInventory();
   if (res.status === "offered") listen("answer");   // mic reopens for accept/pass

@@ -25,6 +25,10 @@ make it yours.
 
 - **Voice locate quotes** — push-to-talk; spelled tickers ("F R S X"), number words ("five
   hundred"), and a daily watchlist bias recognition toward the names you actually trade.
+- **Misheard-ticker guard** — a lone letter ("I", "A", "X") is treated as a mishearing, not a
+  ticker: the console says "Didn't catch that: ticker unclear — spell it, like F R S X" and
+  asks again instead of sending a quote. One-letter tickers still work when they are on
+  `watchlist.txt`.
 - **Rule-gated approval** — ≥ $0.20/share auto-rejects (configurable); $0.10–$0.199 asks with
   a warning; below that just asks. Nothing is ever accepted without your explicit word.
 - **30-second countdown** — the accept window is visualized in the web console and enforced;
@@ -137,6 +141,8 @@ make it yours.
 - "Single Use" locates (Reg SHO threshold symbols) can't be sold back after funding a short.
 - Extended-hours and market-hours behavior of the locate desk isn't documented by TradeZero.
 - Push-to-talk requires the browser tab (or terminal) to have focus.
+- One-letter tickers (e.g. F, T, X) are ignored by voice and by the console's command box
+  unless they are on `watchlist.txt` — they are usually Whisper mishearings.
 - The cost report shows **gross** spend: TradeZero's sell-back response carries no credit
   amount, so refunds from sell-backs are counted (shares) but not netted out (dollars).
 - Log lines written before the `mode` field existed (very early builds) appear only under
@@ -153,6 +159,8 @@ make it yours.
 - **Single Use locates:** no workaround.
 - **Undocumented session hours:** no workaround; expect quotes mainly during regular sessions.
 - **Push-to-talk focus:** no workaround yet; a global OS-level hotkey is on the roadmap.
+- **One-letter tickers:** add the symbol to `watchlist.txt`, or use the terminal UI's typed
+  `locate <shares> <SYMBOL>`, which takes the symbol exactly as typed.
 - **Gross report spend:** check sell-back credits in the TradeZero platform statement.
 - **Pre-`mode` log lines:** select **All** in the report's mode filter to include them.
 - **macOS only:** no workaround.
@@ -176,4 +184,4 @@ make it yours.
 accounts. This tool never places orders and never accepts a locate without your explicit
 confirmation.*
 
-*Last updated: 2026-10-12*
+*Last updated: 2026-10-30*

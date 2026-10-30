@@ -5,6 +5,21 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.4.1] — 2026-10-30
+
+### Fixed
+- Voice commands misheard as ticker **"I"** were sent to TradeZero and came back
+  "1 System error." (live log: Oct 13 and Oct 22). The parser now drops one-letter ticker
+  candidates unless they are on `watchlist.txt`, and returns "ticker unclear — spell it,
+  like F R S X".
+- The web console no longer fails silently on an unparsed command: it speaks
+  "Didn't catch that: <hint>. Try again." and shows the hint under the heard line.
+- A spoken lone letter that is on the watchlist (e.g. "F") is now recognised; previously
+  single letters other than A/I were dropped before matching.
+
+### Tests
+- `tests/test_voice.py`: 6 new parser cases (33 total).
+
 ## [1.4.0] — 2026-10-12
 
 ### Added
