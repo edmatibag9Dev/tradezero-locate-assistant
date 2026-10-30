@@ -10,6 +10,8 @@ Endpoints used (per developer.tradezero.com docs, Aug 2026):
   DELETE /v1/api/accounts/locates/cancel/accounts/{accountId}/quoteReqID/{quoteReqID}
   GET    /v1/api/accounts/{accountId}/locates/inventory
   POST   /v1/api/accounts/locates/sell
+  GET    /v1/api/accounts/{accountId}/cash-transactions/start-date/{YYYY-MM-DD}
+         (read-only: posted locate fees/credits and borrow charges for the report)
 """
 
 from __future__ import annotations
@@ -114,6 +116,27 @@ class TradeZeroClient:
         path = (f"/v1/api/accounts/locates/cancel/accounts/"
                 f"{self.account_id}/quoteReqID/{quote_req_id}")
         return self._request("DELETE", path)
+
+    def cash_transactions(self, start_date: str, days: int = 30) -> list[dict]:
+        """Cash ledger rows in [start_date, start_date + days). Read-only.
+
+        Paginates with offset/limit until pagination.totalRecords is reached;
+        a short pause between pages avoids HTTP 429 on bursts.
+        """
+        rows: list[dict] = []
+        offset, limit = 0, 1000
+        while True:
+            out = self._request(
+                "GET", f"/v1/api/accounts/{self.account_id}/cash-transactions/"
+                f"start-date/{start_date}?numberOfDays={days}&offset={offset}&limit={limit}")
+            page = out.get("cashHistory", []) if isinstance(out, dict) else []
+            rows.extend(page)
+            total = int((out.get("pagination") or {}).get("totalRecords", 0)) \
+                if isinstance(out, dict) else 0
+            offset += len(page)
+            if not page or offset >= total:
+                return rows
+            time.sleep(0.3)
 
     def inventory(self) -> list[dict]:
         out = self._request("GET", f"/v1/api/accounts/{self.account_id}/locates/inventory")

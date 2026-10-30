@@ -5,6 +5,31 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.5.0] — 2026-10-30
+
+### Added
+- **Account-wide locates.** Today's locates now merges TradeZero's `/locates/history` (today,
+  all front ends) with the app's own log; locates taken in ZeroPro show tagged `ACCT`.
+  Settled account rows are saved once each to `logs/platform_locates.jsonl` so multi-day
+  reports keep them.
+- **Posted locate money** in the cost report: locate fees, sell-back credits, overnight borrow
+  and net, from the account's cash ledger (`GET /cash-transactions/start-date/{date}`,
+  paginated) for the chosen period (All = 365 days).
+- `tz_api.cash_transactions()`; mock client gains `locate_history()` and `cash_transactions()`
+  with a sample "ZeroPro" locate (PLAT) and ledger rows.
+- 17 new report tests (43 total).
+
+### Fixed
+- Today's locates and the cost report ignored locates bought outside the console
+  (e.g. ONEG/TNMG in inventory with an empty table on 2026-10-30).
+- Accepted tile showed "— of 0 priced" with no priced quotes; now "no priced quotes".
+- Sell-back log rows now carry `quoteReqID`, so their account copy isn't double-counted.
+
+### Known limitations
+- TradeZero's locate history is same-day only; earlier account locates appear in the dollar
+  totals (cash ledger) but not the request stats.
+- Cash ledger entries can post a day late.
+
 ## [1.4.1] — 2026-10-30
 
 ### Fixed

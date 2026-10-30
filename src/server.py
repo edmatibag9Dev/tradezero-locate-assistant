@@ -171,7 +171,7 @@ def flow_listen(context: str) -> dict:
         req = f"S-{parsed['symbol']}-{uuid.uuid4().hex[:8].upper()}"
         r = CLIENT.sell_back(parsed["symbol"], parsed["qty"], req)
         ok = str(r.get("locateSellSent", "")).lower() == "true"
-        log_quote({"symbol": parsed["symbol"], "qty": parsed["qty"],
+        log_quote({"symbol": parsed["symbol"], "qty": parsed["qty"], "quoteReqID": req,
                    "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
         say(f"Sell back {'sent' if ok else 'failed'} for {parsed['symbol']}.")
         return {**out, "status": "sellback_sent" if ok else "sellback_failed"}
@@ -203,7 +203,7 @@ def flow_sweep() -> dict:
             ok = str(r.get("locateSellSent", "")).lower() == "true"
         except TradeZeroError as e:
             ok, r = False, {"text": str(e)}
-        log_quote({"symbol": symbol, "qty": avail,
+        log_quote({"symbol": symbol, "qty": avail, "quoteReqID": req,
                    "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
         results.append({"symbol": symbol, "qty": avail, "ok": ok,
                         "detail": str(r.get("text", "")).strip()})
@@ -236,6 +236,82 @@ def today_history() -> list[dict]:
         if r.get("ts", "").startswith(today):
             rows.append(r)
     return rows[::-1]
+
+
+# --- account (platform) data ----------------------------------------------
+# Locates taken outside this app (ZeroPro etc.) only exist on the account.
+# Read-only calls; results cached so the 5 s UI poll doesn't hammer the API.
+
+PLATFORM_TTL_S = 15
+CASH_TTL_S = 300
+SETTLED = {"ACCEPTED", "SELLBACK_SENT", "CANCELED", "Rejected", "EXPIRED_UNANSWERED"}
+_platform_cache: dict = {"at": 0.0, "rows": [], "error": None}
+_cash_cache: dict = {}
+_saved_platform: set | None = None
+
+
+def platform_log_path() -> Path:
+    return (ROOT / CONFIG["log_file"]).parent / "platform_locates.jsonl"
+
+
+def _save_platform(rows: list[dict]) -> None:
+    """Append settled account rows once each, so 7/30-day reports keep them
+    after TradeZero's same-day history rolls over. Append-only, like quotes.jsonl."""
+    global _saved_platform
+    path = platform_log_path()
+    if _saved_platform is None:
+        _saved_platform = {(r.get("quoteReqID"), r.get("result"))
+                           for r in report.load_rows(path)}
+    new = [r for r in rows if r.get("result") in SETTLED and r.get("quoteReqID")
+           and (r["quoteReqID"], r["result"]) not in _saved_platform]
+    if not new:
+        return
+    path.parent.mkdir(exist_ok=True)
+    with path.open("a") as f:
+        for r in new:
+            f.write(json.dumps(r) + "\n")
+            _saved_platform.add((r["quoteReqID"], r["result"]))
+
+
+def platform_today() -> tuple[list[dict], str | None]:
+    """Today's account-wide locate rows (cached), mapped to log-style rows."""
+    now = time.time()
+    if now - _platform_cache["at"] < PLATFORM_TTL_S:
+        return _platform_cache["rows"], _platform_cache["error"]
+    try:
+        rows = report.platform_rows(CLIENT.locate_history(), MODE)
+        err = None
+        _save_platform(rows)
+    except (TradeZeroError, OSError, ValueError) as e:
+        rows, err = _platform_cache["rows"], f"account history unavailable: {e}"
+    _platform_cache.update(at=now, rows=rows, error=err)
+    return rows, err
+
+
+def merged_today() -> dict:
+    log_rows = today_history()
+    plat, err = platform_today()
+    today = time.strftime("%Y-%m-%d")
+    plat = [r for r in plat if r.get("ts", "").startswith(today)]
+    rows = report.merge_rows(log_rows, plat)
+    rows.sort(key=lambda r: r.get("ts", ""), reverse=True)
+    return {"history": rows, "platform_error": err}
+
+
+def account_cash(days: int | None) -> dict:
+    """Posted locate fees/credits/borrow from the cash ledger (cached 5 min)."""
+    start, n = report.window(days)
+    key = (start, n)
+    hit = _cash_cache.get(key)
+    if hit and time.time() - hit["at"] < CASH_TTL_S:
+        return hit["data"]
+    try:
+        data = {**report.cash_summary(CLIENT.cash_transactions(start, n)),
+                "start": start, "days": n, "mode": MODE}
+    except (TradeZeroError, OSError, ValueError) as e:
+        data = {"error": f"cash ledger unavailable: {e}", "start": start, "days": n}
+    _cash_cache[key] = {"at": time.time(), "data": data}
+    return data
 
 
 # --- HTTP -----------------------------------------------------------------
@@ -271,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"mode": MODE, "rules": CONFIG["rules"],
                         "pending": pending, "busy": BUSY.locked()})
         elif self.path == "/api/history":
-            self._json({"history": today_history()})
+            self._json(merged_today())
         elif self.path.startswith("/api/report"):
             from urllib.parse import parse_qs, urlparse
             q = parse_qs(urlparse(self.path).query)
@@ -283,7 +359,12 @@ class Handler(BaseHTTPRequestHandler):
                 days = None if raw_days == "all" else max(1, int(raw_days))
             except ValueError:
                 return self._json({"error": "days must be a number or 'all'"}, 400)
-            self._json(report.report(ROOT / CONFIG["log_file"], days, mode))
+            plat, _ = platform_today()
+            extra = report.merge_rows(report.load_rows(platform_log_path()), plat)
+            out = report.report(ROOT / CONFIG["log_file"], days, mode,
+                                extra_rows=extra)
+            out["account"] = account_cash(days)
+            self._json(out)
         elif self.path == "/api/inventory":
             try:
                 self._json({"inventory": CLIENT.inventory()})
@@ -318,6 +399,7 @@ class Handler(BaseHTTPRequestHandler):
                     r = CLIENT.sell_back(parsed["symbol"], parsed["qty"], req)
                     ok = str(r.get("locateSellSent", "")).lower() == "true"
                     log_quote({"symbol": parsed["symbol"], "qty": parsed["qty"],
+                               "quoteReqID": req,
                                "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
                     self._json({"status": "sellback_sent" if ok else "sellback_failed"})
                 else:

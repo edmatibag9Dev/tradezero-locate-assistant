@@ -42,6 +42,12 @@ make it yours.
   table (requests, accepted, shares, spend, avg paid, quoted range). Period: Today / 7 days /
   30 days / All; mode: Real / Mock / All (defaults to Real, last 7 days). Reads only the
   local log — no API calls, no cost. Also available as JSON at `GET /api/report`.
+- **Account-wide locates** — the console reads your TradeZero account (read-only), so locates
+  taken in ZeroPro or any other front end show in **Today's locates** (tagged `ACCT`) and count
+  in the cost report. Settled account rows are saved to `logs/platform_locates.jsonl` each day,
+  so 7- and 30-day reports keep them after TradeZero's same-day history rolls over.
+- **Posted locate money** — the cost report's top row reads the account's cash ledger for the
+  chosen period: locate fees charged, sell-back credits, overnight borrow charges, and the net.
 - **Spoken read-back** — price per share and total cost announced via macOS speech.
 - **Locate inventory + sell-back** — see held locates; sell unused shares back for credit.
 - **End-of-day sweep** — one action refunds ALL unused locate shares: the console button
@@ -62,7 +68,7 @@ make it yours.
 | `src/tz_api.py` | TradeZero REST client (locate endpoints only, no dependencies) |
 | `src/mock_api.py` | Offline mock client with fixed practice symbols |
 | `src/rules.py` | Approval rule engine |
-| `src/report.py` | Locate-cost report: aggregates `logs/quotes.jsonl` by period, mode and symbol |
+| `src/report.py` | Locate-cost report: aggregates the quote log + account locate rows; summarizes the cash ledger |
 | `src/voice.py` | Mic capture, on-device Whisper transcription, command parser |
 | `src/check_keys.py` | Read-only validator for your API keys and config |
 | `config.example.json` | Config template — copy to `config.json` (gitignored) |
@@ -125,6 +131,8 @@ make it yours.
 ## Data Sources
 
 - **TradeZero Developer API** — https://developer.tradezero.com (locates, accounts, orders,
+  Read-only calls for reporting: `GET /locates/history` (today, account-wide) and
+  `GET /cash-transactions/start-date/{date}` (Locate Fees, Locate & Borrow Charge).
   WebSocket streams). Base URL `https://webapi.tradezero.com` for both paper and live; your key
   pair selects the environment. Locate prices are quoted **per share**, quantities in multiples
   of 100, offers expire in **30 seconds**, rate limit 10 req/s on order endpoints.
@@ -143,8 +151,11 @@ make it yours.
 - Push-to-talk requires the browser tab (or terminal) to have focus.
 - One-letter tickers (e.g. F, T, X) are ignored by voice and by the console's command box
   unless they are on `watchlist.txt` — they are usually Whisper mishearings.
-- The cost report shows **gross** spend: TradeZero's sell-back response carries no credit
-  amount, so refunds from sell-backs are counted (shares) but not netted out (dollars).
+- Request stats show spend **before** sell-back credits; the account row shows the net, but
+  TradeZero's cash ledger can post a fee or credit a day late.
+- TradeZero's locate history covers the current trading day only. Account locates from days
+  before this version (or days the console wasn't running) are not in the request stats —
+  the account row (cash ledger) still includes their dollars.
 - Log lines written before the `mode` field existed (very early builds) appear only under
   the report's **All** mode filter.
 - macOS only (uses `say`, sox/coreaudio, Homebrew).
@@ -161,7 +172,9 @@ make it yours.
 - **Push-to-talk focus:** no workaround yet; a global OS-level hotkey is on the roadmap.
 - **One-letter tickers:** add the symbol to `watchlist.txt`, or use the terminal UI's typed
   `locate <shares> <SYMBOL>`, which takes the symbol exactly as typed.
-- **Gross report spend:** check sell-back credits in the TradeZero platform statement.
+- **Late ledger posts:** re-check the period the next day.
+- **Past-day account locates:** use the account row; keep the console running daily so
+  `logs/platform_locates.jsonl` captures them going forward.
 - **Pre-`mode` log lines:** select **All** in the report's mode filter to include them.
 - **macOS only:** no workaround.
 

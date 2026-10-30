@@ -70,7 +70,8 @@ def build_report(rows: list[dict]) -> dict:
     t = {"requests": 0, "priced": 0, "accepted": 0, "accepted_shares": 0,
          "spend": 0.0, "auto_rejected": 0, "rejected_value": 0.0, "passed": 0,
          "expired": 0, "broker_rejected": 0, "accept_failed": 0,
-         "sellbacks": 0, "sellback_shares": 0, "sellback_failed": 0}
+         "sellbacks": 0, "sellback_shares": 0, "sellback_failed": 0,
+         "canceled": 0, "from_platform": 0}
     syms: dict[str, dict] = {}
 
     for r in rows:
@@ -88,6 +89,8 @@ def build_report(rows: list[dict]) -> dict:
                 t["sellback_failed"] += 1
             continue
 
+        if r.get("source") == "platform":
+            t["from_platform"] += 1
         s = syms.setdefault(sym, {"symbol": sym, "requests": 0, "accepted": 0,
                                   "shares": 0, "spend": 0.0, "min_rate": None,
                                   "max_rate": None, "last": ""})
@@ -118,6 +121,8 @@ def build_report(rows: list[dict]) -> dict:
             t["broker_rejected"] += 1
         elif res == "ACCEPT_FAILED":
             t["accept_failed"] += 1
+        elif res == "CANCELED":
+            t["canceled"] += 1
 
     t["spend"] = round(t["spend"], 2)
     t["rejected_value"] = round(t["rejected_value"], 2)
@@ -140,8 +145,144 @@ def build_report(rows: list[dict]) -> dict:
 
 
 def report(path: Path, days: int | None, mode: str,
-           today: dt.date | None = None) -> dict:
-    rows = filter_rows(load_rows(path), days, mode, today)
+           today: dt.date | None = None,
+           extra_rows: list[dict] | None = None) -> dict:
+    """extra_rows: account rows (today's platform history + saved platform
+    log). Only settled outcomes count; in-flight rows are dropped."""
+    extra = [r for r in (extra_rows or [])
+             if r.get("result") not in ("OFFERED", "PENDING")]
+    rows = filter_rows(merge_rows(load_rows(path), extra), days, mode, today)
     out = build_report(rows)
     out.update({"days": days, "mode": mode})
     return out
+
+
+# --- TradeZero account data (read-only API rows) ------------------------------
+# The quote log only knows what this app did. Locates taken in ZeroPro (or any
+# other front end) live on the account, so two account sources fill the gap:
+#   - GET /locates/history  → today's locate rows, account-wide (all statuses)
+#   - GET /cash-transactions → posted locate fees/credits and borrow charges
+
+# TradeZero locateStatus → the quote-log result vocabulary (plus 3 platform-only
+# states that never appear in the app's own log).
+PLATFORM_RESULT = {50: "ACCEPTED", 52: "CANCELED", 56: "Rejected",
+                   67: "EXPIRED_UNANSWERED", 65: "OFFERED", 54: "PENDING",
+                   81: "PENDING", 48: "PENDING"}
+
+
+def _local_ts(iso: str) -> str:
+    """'2026-10-30T15:41:02.123Z' (UTC) → '2026-10-30T08:41:02-0700' (local)."""
+    if not iso:
+        return ""
+    s = iso.strip().replace("Z", "+00:00")
+    if "." in s:  # Python 3.9 fromisoformat can't take >6 fraction digits
+        head, _, tail = s.partition(".")
+        frac = "".join(ch for ch in tail if ch.isdigit())[:6]
+        tz = tail[len("".join(ch for ch in tail if ch.isdigit())):]
+        s = f"{head}.{frac}{tz}" if frac else head + tz
+    try:
+        t = dt.datetime.fromisoformat(s)
+    except ValueError:
+        return iso
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.timezone.utc)
+    return t.astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+def base_req_id(qid: str) -> str:
+    """Reg SHO threshold names answer under '<id>.SU' — same request."""
+    return qid[:-3] if qid.endswith(".SU") else qid
+
+
+def platform_rows(history: list[dict], mode: str) -> list[dict]:
+    """Map TradeZero /locates/history rows to quote-log-style rows.
+
+    Filled rows with negative shares are sell-backs (credits). Rows still in
+    flight (Offered/Pending/Quoting) are kept so the table shows them, but the
+    report ignores them because no money has moved.
+    """
+    out = []
+    for h in history:
+        status = h.get("locateStatus")
+        shares = int(h.get("locateShares") or h.get("filledShares") or 0)
+        rate = h.get("locatePrice")
+        rate = float(rate) if rate not in (None, "") and float(rate) > 0 else None
+        if status == 50 and shares < 0:
+            result = "SELLBACK_SENT"
+        else:
+            result = PLATFORM_RESULT.get(status, str(status))
+        qty = abs(shares)
+        row = {"symbol": (h.get("symbol") or "").upper(), "qty": qty,
+               "rate": rate, "quoteReqID": h.get("quoteReqID", ""),
+               "result": result, "ts": _local_ts(h.get("createdDate", "")),
+               "mode": mode, "source": "platform"}
+        if rate is not None and result != "SELLBACK_SENT":
+            row["total"] = round(rate * qty, 2)
+        if h.get("text"):
+            row["detail"] = str(h["text"]).strip()
+        out.append(row)
+    return out
+
+
+def merge_rows(log_rows: list[dict], extra: list[dict]) -> list[dict]:
+    """Add account rows the app didn't log itself. The app's own row wins for
+    any quoteReqID it already logged (it carries the rule outcome: AUTO_REJECT
+    vs PASSED). Rows without a quoteReqID are always kept."""
+    seen = {base_req_id(r.get("quoteReqID", "")) for r in log_rows
+            if r.get("quoteReqID")}
+    merged = list(log_rows)
+    for r in extra:
+        qid = base_req_id(r.get("quoteReqID", ""))
+        if qid and qid in seen:
+            continue
+        if qid:
+            seen.add(qid)
+        merged.append(r)
+    return merged
+
+
+LOCATE_FEES = "Locate Fees"
+BORROW = "Locate & Borrow Charge"
+
+
+def cash_summary(cash_rows: list[dict]) -> dict:
+    """Posted locate money from the account's cash ledger (real dollars).
+
+    fees     = Locate Fees withdrawals (locates bought)
+    credits  = Locate Fees deposits ("Locate credit…" — sell-backs refunded)
+    borrow   = Locate & Borrow Charge withdrawals (overnight carry)
+    net      = fees + borrow − credits
+    """
+    fees = credits = borrow = 0.0
+    n_fee = n_credit = n_borrow = 0
+    days = set()
+    for r in cash_rows:
+        kind = str(r.get("cashType", "")).strip()
+        dep = float(r.get("deposit") or 0)
+        wd = float(r.get("withdraw") or 0)
+        if kind == LOCATE_FEES:
+            fees += wd
+            credits += dep
+            n_fee += wd > 0
+            n_credit += dep > 0
+        elif kind == BORROW:
+            borrow += wd - dep
+            n_borrow += 1
+        else:
+            continue
+        d = str(r.get("entryDate", ""))[:10]
+        if d:
+            days.add(d)
+    return {"fees": round(fees, 2), "credits": round(credits, 2),
+            "borrow": round(borrow, 2), "net": round(fees + borrow - credits, 2),
+            "fee_entries": n_fee, "credit_entries": n_credit,
+            "borrow_entries": n_borrow,
+            "first_day": min(days) if days else None,
+            "last_day": max(days) if days else None}
+
+
+def window(days: int | None, today: dt.date | None = None) -> tuple[str, int]:
+    """(start_date, number_of_days) for the cash ledger; 'all' = 365 days."""
+    today = today or dt.date.today()
+    n = 365 if days is None else max(1, min(days, 365))
+    return (today - dt.timedelta(days=n - 1)).isoformat(), n

@@ -27,6 +27,17 @@ class MockTradeZeroClient:
         self.account_id = account_id
         self._quotes: dict[str, dict] = {}
         self._inventory: dict[str, dict] = {}
+        # A locate "taken in ZeroPro" this morning: on the account, not in the
+        # app's log — exercises the platform merge in the console and report.
+        now = time.time()
+        self._platform = [{
+            "symbol": "PLAT", "quoteReqID": "ZP-PLAT-0001", "locateShares": 200,
+            "filledShares": 200, "locateStatus": 50, "locateType": 1,
+            "locatePrice": 0.015, "text": "",
+            "createdDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 3600)),
+        }]
+        self._inventory["PLAT"] = {"symbol": "PLAT", "located": 200,
+                                   "available": 200, "spent": 3.0}
 
     def _rate_for(self, symbol: str) -> float:
         if symbol in FIXED:
@@ -59,11 +70,38 @@ class MockTradeZeroClient:
         inv["located"] += q["locateShares"]
         inv["available"] += q["locateShares"]
         inv["spent"] = round(inv["spent"] + q["locatePrice"] * q["locateShares"], 2)
+        q["finalStatus"] = 50
         return {"locateAcceptSent": "true"}
 
     def cancel_locate(self, quote_req_id: str) -> dict:
-        self._quotes.pop(quote_req_id, None)
+        if quote_req_id in self._quotes:
+            self._quotes[quote_req_id]["finalStatus"] = 52
         return {"locateCancelSent": "true"}
+
+    def locate_history(self) -> list[dict]:
+        """Today's account-wide locate rows, TradeZero field names."""
+        rows = list(self._platform)
+        for q in self._quotes.values():
+            rows.append({"symbol": q["symbol"], "quoteReqID": q["quoteReqID"],
+                         "locateShares": q["locateShares"], "locateType": 1,
+                         "locateStatus": q.get("finalStatus", q["locateStatus"]),
+                         "locatePrice": q["locatePrice"], "text": "",
+                         "createdDate": time.strftime(
+                             "%Y-%m-%dT%H:%M:%SZ", time.gmtime(q["offeredAt"]))})
+        return rows
+
+    def cash_transactions(self, start_date: str, days: int = 30) -> list[dict]:
+        """Synthetic ledger: a locate fee and a credit on the start day."""
+        return [
+            {"cashType": "Locate Fees", "deposit": 0, "withdraw": 3.0,
+             "entryDate": f"{start_date}T00:00:00", "note": "Locate fee PLAT"},
+            {"cashType": "Locate Fees", "deposit": 0.75, "withdraw": 0,
+             "entryDate": f"{start_date}T00:00:00", "note": "Locate credit PLAT"},
+            {"cashType": "Locate & Borrow Charge", "deposit": 0, "withdraw": 0.4,
+             "entryDate": f"{start_date}T00:00:00", "note": "Borrow charge"},
+            {"cashType": "Software & Data", "deposit": 0, "withdraw": 15.0,
+             "entryDate": f"{start_date}T00:00:00", "note": "Data fee"},
+        ]
 
     def inventory(self) -> list[dict]:
         return list(self._inventory.values())

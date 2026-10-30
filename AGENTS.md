@@ -45,7 +45,7 @@ locates REST API → rule gate → spoken/web read-back, with every quote logged
 | `samples/quotes.sample.jsonl` | yes | Reference log so the repo previews without real data. |
 | `config.json` | **no (gitignored)** | Holds the owner's real account ID. |
 | `.env` | **no (gitignored)** | Real API keys. |
-| `logs/` | **no (gitignored)** | Real locate/quote history (personal trading data). |
+| `logs/` | **no (gitignored)** | Real locate/quote history (personal trading data), incl. `platform_locates.jsonl` (account rows saved daily). |
 | `models/` | **no (gitignored)** | Whisper binary model (~141 MB) — `setup.sh` downloads it. |
 | `CONFIG.local.md` | **no (gitignored)** | Mapping of placeholders → the owner's real values. |
 
@@ -67,6 +67,8 @@ Rules an agent must preserve:
 - `ts` is local time with offset; the console filters "today" by string prefix `YYYY-MM-DD`.
 - Append-only; never rewrite or dedupe historical lines.
 - API keys and account IDs must never appear in log lines.
+- `logs/platform_locates.jsonl` (account rows, `"source": "platform"`) uses the same fields;
+  its extra result value is `CANCELED`. One line per (`quoteReqID`, `result`); append-only.
 
 ## How it works
 
@@ -92,6 +94,10 @@ Rules an agent must preserve:
   `cmd` in `app.py` main loop AND `server.py` `flow_listen` — keep both in sync.
 - **New API endpoint:** add a method to `src/tz_api.py` (and mirror it in `mock_api.py` so
   mock mode keeps working; tests rely on the mock).
+- **Account data (read-only):** `GET /api/history` merges `CLIENT.locate_history()` (today,
+  account-wide) into the app's own rows via `report.merge_rows` — the app's row wins for a
+  `quoteReqID` it logged. `GET /api/report` adds `account` from `CLIENT.cash_transactions()`
+  (`report.cash_summary`). Both cached (15 s / 5 min). Never add a write call to this path.
 - **Cost report:** metrics live in `src/report.py` (`build_report`); add a field there,
   cover it in `tests/test_report.py`, then render it in the `#report` card of
   `web/index.html`. The report is read-only over the log — never call the API from it.
@@ -122,7 +128,7 @@ Rules an agent must preserve:
 Run before declaring a change done:
 
 1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary);
-   `python3 tests/test_report.py` — 26/26 (cost-report totals, filters, malformed lines).
+   `python3 tests/test_report.py` — 43/43 (cost-report totals, filters, account rows, cash ledger).
 2. `python3 tests/test_voice.py` — 33/33 (parser + synthetic TTS→Whisper→parse audio;
    needs `say`, `sox`, `whisper-cli`, and the model present).
 3. Mock CLI round trip: `printf 'locate 500 EXPN\nquit\n' | python3 src/app.py --mock`

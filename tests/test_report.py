@@ -99,6 +99,57 @@ def run() -> None:
         check("report(): echoes filters", (full["days"], full["mode"]), (1, "real"))
         check("load_rows missing file", report.load_rows(Path(d) / "nope.jsonl"), [])
 
+    # --- account (platform) rows -------------------------------------------
+    hist = [
+        {"symbol": "oneg", "quoteReqID": "ZP-1", "locateShares": 100, "locateStatus": 50,
+         "locatePrice": 0.02, "createdDate": "2026-10-30T14:05:00.1234567Z", "text": ""},
+        {"symbol": "TNMG", "quoteReqID": "ZP-2.SU", "locateShares": 100, "locateStatus": 50,
+         "locatePrice": 0.03, "createdDate": "2026-10-30T14:06:00Z"},
+        {"symbol": "ONEG", "quoteReqID": "ZP-3", "locateShares": -100, "locateStatus": 50,
+         "locatePrice": 0, "createdDate": "2026-10-30T20:00:00Z"},
+        {"symbol": "XYZ", "quoteReqID": "Q-XYZ-1", "locateShares": 100, "locateStatus": 52,
+         "locatePrice": 0.25, "createdDate": "2026-10-30T15:00:00Z"},
+        {"symbol": "ABC", "quoteReqID": "ZP-4", "locateShares": 100, "locateStatus": 65,
+         "locatePrice": 0.01, "createdDate": "2026-10-30T15:01:00Z"},
+    ]
+    pr = report.platform_rows(hist, "real")
+    check("platform: filled -> ACCEPTED, symbol upper-cased",
+          (pr[0]["result"], pr[0]["symbol"], pr[0]["total"]), ("ACCEPTED", "ONEG", 2.0))
+    check("platform: 7-digit UTC fraction parses to local date", pr[0]["ts"][:4], "2026")
+    check("platform: negative filled -> SELLBACK_SENT, no total",
+          (pr[2]["result"], pr[2]["qty"], "total" in pr[2]), ("SELLBACK_SENT", 100, False))
+    check("platform: tagged source", {r["source"] for r in pr}, {"platform"})
+    log = [{"symbol": "XYZ", "qty": 100, "rate": 0.25, "total": 25.0, "quoteReqID": "Q-XYZ-1",
+            "result": "AUTO_REJECT", "ts": "2026-10-30T08:00:00-0700", "mode": "real"}]
+    m = report.merge_rows(log, pr)
+    check("merge: app's own row wins (AUTO_REJECT kept, CANCELED dropped)",
+          [r["result"] for r in m if r["symbol"] == "XYZ"], ["AUTO_REJECT"])
+    check("merge: .SU id de-duplicates", len(report.merge_rows(pr[:2], [dict(pr[1], quoteReqID="ZP-2")])), 2)
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "q.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in log) + "\n")
+        rt = report.report(p, None, "real", TODAY, extra_rows=pr)["totals"]
+        check("report+account: accepted incl. ZeroPro locates", rt["accepted"], 2)
+        check("report+account: spend incl. ZeroPro locates", rt["spend"], 5.0)
+        check("report+account: in-flight OFFERED row ignored", rt["requests"], 3)
+        check("report+account: from_platform count", rt["from_platform"], 2)
+        check("report+account: sell-back counted", rt["sellbacks"], 1)
+
+    cash = [
+        {"cashType": "Locate Fees", "deposit": 0, "withdraw": 2.0, "entryDate": "2026-10-29T00:00:00"},
+        {"cashType": "Locate Fees", "deposit": 3.0, "withdraw": 0, "entryDate": "2026-10-28T00:00:00"},
+        {"cashType": "Locate Fees", "deposit": 0, "withdraw": 5.5, "entryDate": "2026-10-30T00:00:00"},
+        {"cashType": "Locate & Borrow Charge", "deposit": 0, "withdraw": 0.4, "entryDate": "2026-10-30T00:00:00"},
+        {"cashType": "Software & Data", "deposit": 0, "withdraw": 15.0, "entryDate": "2026-10-30T00:00:00"},
+    ]
+    cs = report.cash_summary(cash)
+    check("cash: fees / credits / borrow", (cs["fees"], cs["credits"], cs["borrow"]), (7.5, 3.0, 0.4))
+    check("cash: net = fees + borrow - credits", cs["net"], 4.9)
+    check("cash: other cash types ignored", cs["fee_entries"] + cs["credit_entries"], 3)
+    check("cash: empty ledger", report.cash_summary([])["net"], 0.0)
+    check("window: 7 days", report.window(7, TODAY), ("2026-10-06", 7))
+    check("window: all = 365", report.window(None, TODAY)[1], 365)
+
     print(f"\n{passed}/{passed + failed} passed")
     sys.exit(1 if failed else 0)
 

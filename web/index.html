@@ -110,6 +110,12 @@
   .kpi .v { font: 600 20px "IBM Plex Mono", monospace; margin-top: 2px; }
   .kpi .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
   #rep-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .src { font: 600 10px Inter; letter-spacing: .05em; text-transform: uppercase;
+         color: var(--navy-600); border: 1px solid var(--border); border-radius: 4px;
+         padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
+  .rep-sub { font: 600 12px Inter; color: var(--muted); text-transform: uppercase;
+             letter-spacing: .06em; margin: 4px 0 8px; }
+  .warnline { color: var(--warn-text); font-size: 12px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -183,6 +189,9 @@
           <button data-v="all">All</button>
         </div>
       </div>
+      <div class="rep-sub">TradeZero account — posted locate money</div>
+      <div class="kpis" id="rep-acct"></div>
+      <div class="rep-sub">Locate requests — console + account</div>
       <div class="kpis" id="rep-kpis"></div>
       <table>
         <thead><tr>
@@ -221,13 +230,15 @@ function badge(result) {
     PASSED: ["b-pass", "passed"], EXPIRED_UNANSWERED: ["b-warn", "expired"],
     NO_QUOTE: ["b-warn", "no quote"], SELLBACK_SENT: ["b-info", "sold back"],
     SELLBACK_FAILED: ["b-rej", "sellback failed"],
+    CANCELED: ["b-pass", "canceled"], OFFERED: ["b-info", "offered"],
+    PENDING: ["b-warn", "pending"],
   };
   const [cls, label] = map[result] || ["b-pass", result.toLowerCase()];
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
 async function refreshHistory() {
-  const { history } = await api("/api/history");
+  const { history, platform_error } = await api("/api/history");
   const tb = $("hist");
   tb.innerHTML = history.length ? "" : `<tr><td colspan="6" class="empty">No locate activity yet today.</td></tr>`;
   let accepted = 0, spent = 0;
@@ -235,13 +246,14 @@ async function refreshHistory() {
     if (h.result === "ACCEPTED") { accepted++; spent += h.total || 0; }
     const t = (h.ts || "").slice(11, 19);
     tb.innerHTML += `<tr>
-      <td class="num">${t}</td><td><strong>${h.symbol || ""}</strong></td>
+      <td class="num">${t}</td><td><strong>${h.symbol || ""}</strong>${h.source === "platform"
+        ? '<span class="src" title="Taken outside this console (e.g. ZeroPro) — from your TradeZero account">acct</span>' : ""}</td>
       <td class="num">${h.qty ?? ""}</td>
       <td class="num">${h.rate != null ? rateFmt(h.rate) : "—"}</td>
       <td class="num">${h.total != null ? money(h.total) : "—"}</td>
       <td>${badge(h.result || "")}</td></tr>`;
   }
-  $("summary").innerHTML =
+  $("summary").innerHTML = (platform_error ? `<div class="warnline">${platform_error}</div>` : "") +
     `<strong>${history.length}</strong> quotes today · ` +
     `<strong>${accepted}</strong> accepted · ` +
     `<strong>${money(spent)}</strong> spent on locates`;
@@ -267,6 +279,8 @@ function segInit(id, key) {
   paint();
 }
 
+function plural(n, word) { return `${n} ${word}${n === 1 ? "" : "s"}`; }
+
 function kpi(label, value, sub) {
   return `<div class="kpi"><div class="k">${label}</div><div class="v">${value}</div>` +
          (sub ? `<div class="s">${sub}</div>` : "") + `</div>`;
@@ -277,11 +291,17 @@ async function refreshReport() {
   try { r = await api(`/api/report?days=${REP.days}&mode=${REP.mode}`); }
   catch { $("rep-note").textContent = "Report unavailable."; return; }
   if (r.error) { $("rep-note").textContent = r.error; return; }
-  const t = r.totals;
-  const pct = t.accept_rate == null ? "—" : Math.round(t.accept_rate * 100) + "%";
+  const t = r.totals, a = r.account || {};
+  $("rep-acct").innerHTML = a.error
+    ? `<div class="warnline" style="grid-column:1/-1">${a.error}</div>`
+    : kpi("Locate fees", money(a.fees || 0), plural(a.fee_entries || 0, "charge")) +
+      kpi("Sell-back credits", money(a.credits || 0), plural(a.credit_entries || 0, "credit")) +
+      kpi("Net locate cost", money(a.net || 0),
+          `incl. ${money(a.borrow || 0)} borrow · since ${a.start || "—"}`);
+  const pct = t.accept_rate == null ? null : Math.round(t.accept_rate * 100) + "%";
   $("rep-kpis").innerHTML =
     kpi("Spent on locates", money(t.spend), `${t.accepted_shares} shares`) +
-    kpi("Accepted", t.accepted, `${pct} of ${t.priced} priced`) +
+    kpi("Accepted", t.accepted, pct ? `${pct} of ${t.priced} priced` : "no priced quotes") +
     kpi("Avg paid / share", t.avg_rate == null ? "—" : rateFmt(t.avg_rate)) +
     kpi("Auto-rejected", t.auto_rejected, `${money(t.rejected_value)} declined`) +
     kpi("Passed · expired", `${t.passed} · ${t.expired}`,
@@ -299,8 +319,9 @@ async function refreshReport() {
     : `<tr><td colspan="7" class="empty">No ${REP.mode === "all" ? "" : REP.mode + " "}locate activity in this period.</td></tr>`;
   const span = r.first_day ? (r.first_day === r.last_day ? r.first_day
                : `${r.first_day} → ${r.last_day}`) : "no data";
-  $("rep-note").textContent = `${t.requests} requests · ${span} · ` +
-    "Sell-back refunds aren't in the log, so spend is gross.";
+  $("rep-note").textContent = `${t.requests} requests (${t.from_platform} from account) · ${span}. ` +
+    "Account totals come from TradeZero's cash ledger, which can post a day late; " +
+    "request stats show spend before sell-back credits.";
 }
 
 async function refreshInventory() {
