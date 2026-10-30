@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import report
 import rules
 import voice
-from tz_api import TradeZeroClient, TradeZeroError, STATUS, OFFERED
+from tz_api import TradeZeroClient, TradeZeroError, STATUS, OFFERED, sellback_ok
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = json.loads((ROOT / "config.json").read_text())
@@ -170,7 +170,7 @@ def flow_listen(context: str) -> dict:
     if parsed["cmd"] == "sellback":
         req = f"S-{parsed['symbol']}-{uuid.uuid4().hex[:8].upper()}"
         r = CLIENT.sell_back(parsed["symbol"], parsed["qty"], req)
-        ok = str(r.get("locateSellSent", "")).lower() == "true"
+        ok = sellback_ok(r)
         log_quote({"symbol": parsed["symbol"], "qty": parsed["qty"], "quoteReqID": req,
                    "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
         say(f"Sell back {'sent' if ok else 'failed'} for {parsed['symbol']}.")
@@ -200,7 +200,7 @@ def flow_sweep() -> dict:
         req = f"S-{symbol}-{uuid.uuid4().hex[:8].upper()}"
         try:
             r = CLIENT.sell_back(symbol, avail, req)
-            ok = str(r.get("locateSellSent", "")).lower() == "true"
+            ok = sellback_ok(r)
         except TradeZeroError as e:
             ok, r = False, {"text": str(e)}
         log_quote({"symbol": symbol, "qty": avail, "quoteReqID": req,
@@ -360,7 +360,8 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 return self._json({"error": "days must be a number or 'all'"}, 400)
             plat, _ = platform_today()
-            extra = report.merge_rows(report.load_rows(platform_log_path()), plat)
+            saved = report.normalize_saved(report.load_rows(platform_log_path()))
+            extra = report.merge_rows(saved, plat)
             out = report.report(ROOT / CONFIG["log_file"], days, mode,
                                 extra_rows=extra)
             out["account"] = account_cash(days)
@@ -397,7 +398,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif parsed["cmd"] == "sellback":
                     req = f"S-{parsed['symbol']}-{uuid.uuid4().hex[:8].upper()}"
                     r = CLIENT.sell_back(parsed["symbol"], parsed["qty"], req)
-                    ok = str(r.get("locateSellSent", "")).lower() == "true"
+                    ok = sellback_ok(r)
                     log_quote({"symbol": parsed["symbol"], "qty": parsed["qty"],
                                "quoteReqID": req,
                                "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})

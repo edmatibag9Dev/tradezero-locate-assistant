@@ -135,6 +135,50 @@ def run() -> None:
         check("report+account: from_platform count", rt["from_platform"], 2)
         check("report+account: sell-back counted", rt["sellbacks"], 1)
 
+    # --- 2026-10-30 live findings ------------------------------------------
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    import tz_api
+    check("sellback_ok: documented field", tz_api.sellback_ok({"locateSellbackSent": "true"}), True)
+    check("sellback_ok: legacy field", tz_api.sellback_ok({"locateSellSent": "true"}), True)
+    check("sellback_ok: false / missing", (tz_api.sellback_ok({"locateSellbackSent": "false"}),
+                                          tz_api.sellback_ok({})), (False, False))
+    for raw in ("2026-10-30T14:50:34.27Z", "2026-10-30T12:26:02.817Z",
+                "2026-10-30T12:26:19.0234567Z", "2026-10-30T12:26:19Z"):
+        got = report._local_ts(raw)
+        check(f"ts converted to local offset: {raw}", (got[-5] in "+-", got.endswith("Z")), (True, False))
+    utc = dt.datetime(2026, 10, 30, 14, 50, 34, tzinfo=dt.timezone.utc)
+    check("ts keeps the instant", report._local_ts("2026-10-30T14:50:34.27Z"),
+          utc.astimezone().strftime("%Y-%m-%dT%H:%M:%S%z"))
+    sells = report.platform_rows([
+        {"symbol": "ONEG", "quoteReqID": "S-ONEG-1", "locateShares": -100, "locateStatus": 50,
+         "locatePrice": 0, "createdDate": "2026-10-30T18:57:00Z"},
+        {"symbol": "TNMG", "quoteReqID": "S-TNMG-1", "locateShares": -100, "locateStatus": 56,
+         "locatePrice": 0, "createdDate": "2026-10-30T18:57:00Z", "text": "16 Insufficient shares."},
+        {"symbol": "XX", "quoteReqID": "S-XX-1", "locateShares": -100, "locateStatus": 48,
+         "locatePrice": 0, "createdDate": "2026-10-30T18:57:00Z"},
+        {"symbol": "TNMG", "quoteReqID": "Q9", "locateShares": 0, "locateStatus": 56,
+         "accountId": "ACCT123", "createdDate": "2026-10-30T12:26:19Z",
+         "text": "Accept is already pending for account ACCT123 and symbol TNMG."},
+    ], "real")
+    check("sell rows: filled / rejected / queued",
+          [r["result"] for r in sells[:3]], ["SELLBACK_SENT", "SELLBACK_FAILED", "PENDING"])
+    check("account ID scrubbed from broker text", "ACCT123" in sells[3]["detail"], False)
+    check("scrub without known ID", report.scrub("pending for account 9XY99 and", None),
+          "pending for account … and")
+    applog = [{"symbol": "ONEG", "qty": 100, "quoteReqID": "S-ONEG-1", "result": "SELLBACK_FAILED",
+               "ts": "2026-10-30T11:56:56-0700", "mode": "real"},
+              {"symbol": "TNMG", "qty": 100, "quoteReqID": "S-TNMG-1", "result": "SELLBACK_SENT",
+               "ts": "2026-10-30T11:56:56-0700", "mode": "real"}]
+    mm = report.merge_rows(applog, sells)
+    check("merge: account outcome overrides app sell-back status",
+          [(r["symbol"], r["result"]) for r in mm if r["quoteReqID"].startswith("S-O") or r["quoteReqID"].startswith("S-T")],
+          [("ONEG", "SELLBACK_SENT"), ("TNMG", "SELLBACK_FAILED")])
+    check("merge: no duplicate sell rows", sum(r["quoteReqID"].startswith("S-") for r in mm), 3)
+    saved = report.normalize_saved([{"symbol": "TNMG", "ts": "2026-10-30T12:26:19.023Z",
+                                     "detail": "pending for account 9XY99 and symbol", "source": "platform"}])
+    check("normalize_saved: ts + scrub", (saved[0]["ts"].endswith("Z"), "9XY99" in saved[0]["detail"]),
+          (False, False))
+
     cash = [
         {"cashType": "Locate Fees", "deposit": 0, "withdraw": 2.0, "entryDate": "2026-10-29T00:00:00"},
         {"cashType": "Locate Fees", "deposit": 3.0, "withdraw": 0, "entryDate": "2026-10-28T00:00:00"},

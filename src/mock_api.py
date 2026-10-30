@@ -112,5 +112,5 @@ class MockTradeZeroClient:
         if inv and inv["available"] >= quantity:
             inv["available"] -= quantity
             inv["located"] -= quantity
-            return {"locateSellSent": "true"}
-        return {"locateSellSent": "false", "text": "insufficient available shares"}
+            return {"locateSellbackSent": "true"}  # documented field name
+        return {"locateSellbackSent": "false", "text": "insufficient available shares"}

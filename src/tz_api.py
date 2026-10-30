@@ -42,6 +42,16 @@ class TradeZeroError(Exception):
     pass
 
 
+def sellback_ok(resp: dict) -> bool:
+    """True when TradeZero acknowledged a sell-back. The documented field is
+    `locateSellbackSent`; `locateSellSent` is accepted for older responses.
+    Acknowledged ≠ processed: the row can still be rejected later in history."""
+    if not isinstance(resp, dict):
+        return False
+    v = resp.get("locateSellbackSent", resp.get("locateSellSent", ""))
+    return str(v).lower() == "true"
+
+
 class TradeZeroClient:
     def __init__(self, base_url: str, account_id: str):
         self.base_url = base_url.rstrip("/")

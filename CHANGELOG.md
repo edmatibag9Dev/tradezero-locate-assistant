@@ -5,6 +5,24 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.5.2] — 2026-10-30
+
+### Fixed
+- **Every sell-back was reported as failed** (since 1.3.0). TradeZero answers
+  `{"locateSellbackSent": "true"}`; the code checked `locateSellSent`, so successful sweeps
+  logged `SELLBACK_FAILED`, spoke "failed" and showed "swept 0 shares". New
+  `tz_api.sellback_ok()` reads the documented field (old name still accepted); the mock now
+  returns the documented field. Found on the live account 2026-10-30 (ONEG/TNMG sweep).
+- Sell-back rows now show the account's final outcome: processed → sold back, rejected
+  (e.g. "16 Insufficient shares.") → sellback failed, queued → pending.
+- Account-row times were left in UTC on Python 3.9 (the Mac Studio's launchd Python):
+  fractions of 2 or 7 digits broke parsing. Times now convert to local time on 3.9+.
+- Broker text that named the account ID was saved to `logs/platform_locates.jsonl`. Text is
+  now scrubbed before saving; rows saved by 1.5.0–1.5.1 are repaired when read.
+
+### Tests
+- 14 new report checks (57 total); suite verified on Python 3.9.25 and 3.13.
+
 ## [1.5.1] — 2026-10-30
 
 ### Changed

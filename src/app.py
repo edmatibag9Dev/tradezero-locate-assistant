@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import rules
 import voice
-from tz_api import TradeZeroClient, TradeZeroError, STATUS, OFFERED
+from tz_api import TradeZeroClient, TradeZeroError, STATUS, OFFERED, sellback_ok
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = json.loads((ROOT / "config.json").read_text())
@@ -182,7 +182,7 @@ def do_sweep(client) -> None:
     for symbol, avail in todo:
         req = f"S-{symbol}-{uuid.uuid4().hex[:8].upper()}"
         out = client.sell_back(symbol, avail, req)
-        ok = str(out.get("locateSellSent", "")).lower() == "true"
+        ok = sellback_ok(out)
         log_quote({"symbol": symbol, "qty": avail,
                    "result": "SELLBACK_SENT" if ok else "SELLBACK_FAILED"})
         print(f"   {symbol}: {avail} shares -> {'sent' if ok else 'FAILED'} "
@@ -200,7 +200,7 @@ def do_sweep(client) -> None:
 def do_sellback(client, shares: int, symbol: str) -> None:
     req_id = f"S-{symbol.upper()}-{uuid.uuid4().hex[:8].upper()}"
     out = client.sell_back(symbol, shares, req_id)
-    ok = str(out.get("locateSellSent", "")).lower() == "true"
+    ok = sellback_ok(out)
     say(f"Sell-back {'sent' if ok else 'failed'} for {shares} {symbol.upper()}."
         + ("" if ok else f" {out.get('text', '')}"))
     log_quote({"symbol": symbol.upper(), "qty": shares,

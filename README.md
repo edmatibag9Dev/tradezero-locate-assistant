@@ -45,7 +45,9 @@ make it yours.
   local log — no API calls, no cost. Also available as JSON at `GET /api/report`.
 - **Account-wide locates** — the console reads your TradeZero account (read-only), so locates
   taken in ZeroPro or any other front end show in **Today's locates** (tagged `ACCT`) and count
-  in the cost report. Settled account rows are saved to `logs/platform_locates.jsonl` each day,
+  in the cost report. A sell-back's final result (sold back or rejected, e.g. "Insufficient
+  shares") comes from the account, not the immediate acknowledgement. Times are shown in the
+  console Mac's local time. Settled account rows are saved to `logs/platform_locates.jsonl` each day,
   so 7- and 30-day reports keep them after TradeZero's same-day history rolls over.
 - **Posted locate money** — the cost report's top row reads the account's cash ledger for the
   chosen period: locate fees charged, sell-back credits, overnight borrow charges, and the net.

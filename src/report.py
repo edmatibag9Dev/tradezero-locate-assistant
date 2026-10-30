@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 from pathlib import Path
 
 SELLBACK = {"SELLBACK_SENT", "SELLBACK_FAILED"}
@@ -175,11 +176,12 @@ def _local_ts(iso: str) -> str:
     if not iso:
         return ""
     s = iso.strip().replace("Z", "+00:00")
-    if "." in s:  # Python 3.9 fromisoformat can't take >6 fraction digits
-        head, _, tail = s.partition(".")
-        frac = "".join(ch for ch in tail if ch.isdigit())[:6]
-        tz = tail[len("".join(ch for ch in tail if ch.isdigit())):]
-        s = f"{head}.{frac}{tz}" if frac else head + tz
+    # Python 3.9's fromisoformat only takes 3- or 6-digit fractions; TradeZero
+    # sends 2, 3 or 7. Normalise the fraction to exactly 6 digits.
+    m = re.match(r"^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(.*)$", s)
+    if m:
+        frac = ((m.group(2) or "") + "000000")[:6]
+        s = f"{m.group(1)}.{frac}{m.group(3)}"
     try:
         t = dt.datetime.fromisoformat(s)
     except ValueError:
@@ -189,9 +191,31 @@ def _local_ts(iso: str) -> str:
     return t.astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
+def normalize_saved(rows: list[dict]) -> list[dict]:
+    """Repair platform rows saved by v1.5.0–1.5.1 (raw UTC 'Z' timestamps,
+    broker text that could carry the account ID) at read time."""
+    out = []
+    for r in rows:
+        r = dict(r)
+        ts = str(r.get("ts", ""))
+        if ts.endswith("Z") or ts.endswith("+00:00"):
+            r["ts"] = _local_ts(ts)
+        if r.get("detail"):
+            r["detail"] = scrub(str(r["detail"]), None)
+        out.append(r)
+    return out
+
+
 def base_req_id(qid: str) -> str:
     """Reg SHO threshold names answer under '<id>.SU' — same request."""
     return qid[:-3] if qid.endswith(".SU") else qid
+
+
+def scrub(text: str, account_id: str | None) -> str:
+    """Drop the account ID from broker text ("…pending for account <id> and…")."""
+    if account_id:
+        text = text.replace(account_id, "…")
+    return re.sub(r"\baccount \S+", "account …", text)
 
 
 def platform_rows(history: list[dict], mode: str) -> list[dict]:
@@ -207,8 +231,12 @@ def platform_rows(history: list[dict], mode: str) -> list[dict]:
         shares = int(h.get("locateShares") or h.get("filledShares") or 0)
         rate = h.get("locatePrice")
         rate = float(rate) if rate not in (None, "") and float(rate) > 0 else None
-        if status == 50 and shares < 0:
-            result = "SELLBACK_SENT"
+        if shares < 0 and status == 50:
+            result = "SELLBACK_SENT"            # processed: credit issued
+        elif shares < 0 and status == 56:
+            result = "SELLBACK_FAILED"          # e.g. "16 Insufficient shares."
+        elif shares < 0 and status == 52:
+            result = "CANCELED"
         else:
             result = PLATFORM_RESULT.get(status, str(status))
         qty = abs(shares)
@@ -219,7 +247,7 @@ def platform_rows(history: list[dict], mode: str) -> list[dict]:
         if rate is not None and result != "SELLBACK_SENT":
             row["total"] = round(rate * qty, 2)
         if h.get("text"):
-            row["detail"] = str(h["text"]).strip()
+            row["detail"] = scrub(str(h["text"]).strip(), h.get("accountId"))
         out.append(row)
     return out
 
@@ -228,9 +256,21 @@ def merge_rows(log_rows: list[dict], extra: list[dict]) -> list[dict]:
     """Add account rows the app didn't log itself. The app's own row wins for
     any quoteReqID it already logged (it carries the rule outcome: AUTO_REJECT
     vs PASSED). Rows without a quoteReqID are always kept."""
-    seen = {base_req_id(r.get("quoteReqID", "")) for r in log_rows
-            if r.get("quoteReqID")}
-    merged = list(log_rows)
+    SELL = ("SELLBACK_SENT", "SELLBACK_FAILED")
+    settled_sell = {base_req_id(r.get("quoteReqID", "")): r for r in extra
+                    if r.get("quoteReqID") and r.get("result") in SELL + ("CANCELED",)
+                    and r.get("source") == "platform"}
+    merged, seen = [], set()
+    for r in log_rows:
+        qid = base_req_id(r.get("quoteReqID", ""))
+        if qid and r.get("result") in SELL and qid in settled_sell:
+            acct = settled_sell[qid]
+            r = {**r, "result": acct["result"], "settled_by": "account"}
+            if acct.get("detail"):
+                r["detail"] = acct["detail"]
+        if qid:
+            seen.add(qid)
+        merged.append(r)
     for r in extra:
         qid = base_req_id(r.get("quoteReqID", ""))
         if qid and qid in seen:
