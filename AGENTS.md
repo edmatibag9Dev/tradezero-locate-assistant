@@ -19,6 +19,8 @@ locates REST API → rule gate → spoken/web read-back, with every quote logged
 | Path | Committed? | Purpose |
 |---|---|---|
 | `AGENTS.md` | yes | This guide. |
+| `CLAUDE.md` | yes | Claude Code entry point: imports this file + session/deploy steps. |
+| `PROJECT-NOTE.md` | **no (gitignored)** | Local status + open items on the machine that runs the console. |
 | `README.md` | yes | Human quickstart (9-section standard). |
 | `llms.txt` | yes | Machine-readable index. |
 | `CONTRIBUTING.md` | yes | Commit + README rules. |
@@ -36,10 +38,12 @@ locates REST API → rule gate → spoken/web read-back, with every quote logged
 | `src/voice.py` | yes | Mic record (sox), transcription (whisper-cli), command parser. |
 | `src/app.py` | yes | Terminal UI — typed or `--voice` push-to-talk loop. |
 | `src/server.py` | yes | Localhost web console (stdlib http.server) + JSON API. |
+| `src/access.py` | yes | Request allow-list (local, home network, Tailscale; refuses Funnel). |
 | `src/report.py` | yes | Locate-cost report — pure aggregation of `logs/quotes.jsonl` (no network). |
 | `src/check_keys.py` | yes | Read-only key/config validator (two harmless GETs). |
 | `web/index.html` | yes | Single-page console UI (self-contained; Google Fonts only). |
 | `tests/test_rules.py` | yes | Rule-band boundary tests. |
+| `tests/test_access.py` | yes | Allow-list tests (private ranges, Tailscale, public, Funnel). |
 | `tests/test_report.py` | yes | Locate-cost report aggregation + filter tests. |
 | `tests/test_voice.py` | yes | Parser tests + TTS→Whisper→parse end-to-end audio tests. |
 | `samples/quotes.sample.jsonl` | yes | Reference log so the repo previews without real data. |
@@ -120,6 +124,9 @@ Rules an agent must preserve:
 - Never print or log API keys; `tz_api.py` reads them from env only.
 - Voice audio is processed on-device and the scratch wav lives in `/tmp` — never persist it.
 
+> 🔒 **Network rule:** every HTTP handler starts with `self._refuse_outsiders()`. Keep it on
+> any new route — the console can spend money, so only local / Tailscale devices may call it.
+
 > ⛔ **Money rule:** accepting a locate spends real dollars on a live account. Never auto-accept
 > anywhere in this codebase. Auto-reject is safe to automate; accept always requires an explicit
 > human "accept" (spoken, hotkey, or click). Preserve this invariant in any change.
@@ -134,6 +141,7 @@ Rules an agent must preserve:
 Run before declaring a change done:
 
 1. `python3 tests/test_rules.py` — 9/9 (rule bands, including the $0.20 boundary);
+   `python3 tests/test_access.py` — 18/18 (network allow-list);
    `python3 tests/test_report.py` — 65/65 (cost-report totals, filters, account rows, cash ledger,
    sell-back ack, timestamps, account-ID scrub). Run on **Python 3.9** too — the Mac Studio's
    launchd job uses `/usr/bin/python3` (3.9).

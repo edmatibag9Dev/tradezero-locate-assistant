@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import access
 import report
 import rules
 import voice
@@ -318,9 +319,34 @@ def account_cash(days: int | None) -> dict:
 
 # --- HTTP -----------------------------------------------------------------
 
+ALLOWED_NETS = access.parse_networks(CONFIG.get("allowed_networks"))
+_refused_logged: set = set()
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # quiet
         pass
+
+    def _refuse_outsiders(self) -> bool:
+        """403 anything not from this Mac, the home network or Tailscale.
+        Returns True if the request was refused (caller must stop)."""
+        ip = self.client_address[0]
+        if not access.client_allowed(ip, ALLOWED_NETS):
+            why = "not local network or Tailscale"
+        elif access.relayed_from_public(self.headers):
+            why = "relayed from the public internet (Tailscale Funnel)"
+        else:
+            return False
+        if (ip, why) not in _refused_logged:  # one line per source, not per request
+            _refused_logged.add((ip, why))
+            print(f"refused request from {ip}: {why}", file=sys.stderr, flush=True)
+        body = b"Forbidden: this console only answers local-network and Tailscale devices.\n"
+        self.send_response(403)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
 
     def _json(self, obj, code=200):
         body = json.dumps(obj).encode()
@@ -331,6 +357,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self._refuse_outsiders():
+            return
         if self.path in ("/", "/index.html"):
             body = (ROOT / "web" / "index.html").read_bytes()
             self.send_response(200)
@@ -377,6 +405,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):
+        if self._refuse_outsiders():
+            return
         n = int(self.headers.get("Content-Length") or 0)
         payload = json.loads(self.rfile.read(n) or b"{}") if n else {}
         try:
@@ -451,12 +481,49 @@ def main() -> None:
         print(f"Locate console ({MODE} mode) on ALL interfaces:")
         print(f"  this Mac:      http://127.0.0.1:{port}")
         print(f"  from your LAN: http://{lan_ip()}:{port}")
-        print("  ⚠ LAN mode: anyone on this network can reach the console —")
-        print("    accept/pass included. Use only on a trusted home network.")
+        print("  Answers only this Mac, private home-network addresses and Tailscale")
+        print("  devices (allowed_networks); Tailscale Funnel requests are refused.")
     else:
         print(f"Locate console ({MODE} mode): http://127.0.0.1:{port}")
         print("  (this Mac only — start with --lan to allow other devices)")
-    ThreadingHTTPServer((host, port), Handler).serve_forever()
+    sys.stdout.flush()
+    serve(host, port)
+
+
+def serve(host: str, port: int, retry_s: int = 30) -> None:
+    """Bind and serve. If the port is taken (usually a second copy of the
+    console, e.g. one started in Terminal while the launchd job runs), wait
+    and retry instead of exiting: an exit makes launchd restart the job every
+    ~10 s and fills logs/console.err (230 'Address already in use' tracebacks
+    were found on 2026-10-30)."""
+    import errno
+    import urllib.request
+    warned = False
+    while True:
+        try:
+            httpd = ThreadingHTTPServer((host, port), Handler)
+        except OSError as e:
+            if e.errno != errno.EADDRINUSE:
+                raise
+            if not warned:
+                who = "something else"
+                try:
+                    with urllib.request.urlopen(
+                            f"http://127.0.0.1:{port}/api/state", timeout=2) as r:
+                        if b'"mode"' in r.read():
+                            who = "another locate console"
+                except Exception:
+                    pass
+                print(f"port {port} is in use by {who}; waiting — retrying every "
+                      f"{retry_s} s (stop the other copy to hand over)",
+                      file=sys.stderr, flush=True)
+                warned = True
+            time.sleep(retry_s)
+            continue
+        if warned:
+            print(f"port {port} is free — console started", file=sys.stderr, flush=True)
+        httpd.serve_forever()
+        return
 
 
 if __name__ == "__main__":

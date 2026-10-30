@@ -5,6 +5,24 @@ All notable changes to this project are documented here. Format follows
 Real quote logs (`logs/`), keys (`.env`), personal config (`config.json`), and the Whisper
 model binary (`models/`) are gitignored and never committed.
 
+## [1.7.0] — 2026-10-30
+
+### Added
+- **Network allow-list** (`src/access.py`). Every request is checked: this Mac, private
+  home-network ranges (10/8, 172.16/12, 192.168/16) and Tailscale (100.64/10,
+  fd7a:115c:a1e0::/48) are served; anything else gets 403. Requests carrying Tailscale's
+  `Tailscale-Funnel-Request` header (public internet via Funnel) are refused. Optional
+  `"allowed_networks"` in `config.json` overrides the list. One stderr line per refused source.
+- **Port hand-over.** If the port is busy, the console says who holds it ("another locate
+  console") and retries every 30 s instead of exiting — ends the launchd crash loop behind
+  the 230 "Address already in use" tracebacks found in `logs/console.err`.
+- `CLAUDE.md` for Claude Code sessions (imports AGENTS.md; session start, deploy, money rules).
+  `PROJECT-NOTE.md` (local status) is gitignored.
+- `tests/test_access.py` — 18 checks.
+
+### Changed
+- `--lan` startup banner describes the allow-list instead of "anyone on this network".
+
 ## [1.6.0] — 2026-10-30
 
 ### Added

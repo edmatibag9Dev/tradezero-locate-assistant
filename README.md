@@ -63,6 +63,12 @@ make it yours.
   symbol, shares available · sell-back pending (`toBeSold`) · sold back (`sold`), refreshed
   every 15 s. The report's **Sold back (processed)** tile counts only processed sell-backs and
   lists pending shares separately; credit dollars come only from the cash ledger.
+- **Network allow-list** — with `--lan`, every request is checked: this Mac, private
+  home-network ranges and Tailscale devices are served; everything else gets 403. Requests
+  that Tailscale Funnel relays from the public internet are refused too.
+- **One console at a time** — if the port is already in use (e.g. a copy started in Terminal
+  while the launchd job runs), the second copy waits and takes over when the port frees,
+  instead of crash-looping.
 - **Mock mode** — practice the entire flow with zero risk and no API keys.
 - **Terminal UI** — the same flows work in a plain CLI (`src/app.py`), typed or voice.
 
@@ -77,14 +83,16 @@ make it yours.
 | `src/tz_api.py` | TradeZero REST client (locate endpoints only, no dependencies) |
 | `src/mock_api.py` | Offline mock client with fixed practice symbols |
 | `src/rules.py` | Approval rule engine |
+| `src/access.py` | Who may use the console: this Mac, home network, Tailscale (`allowed_networks`) |
 | `src/report.py` | Locate-cost report: aggregates the quote log + account locate rows; summarizes the cash ledger |
 | `src/voice.py` | Mic capture, on-device Whisper transcription, command parser |
 | `src/check_keys.py` | Read-only validator for your API keys and config |
 | `config.example.json` | Config template — copy to `config.json` (gitignored) |
 | `.env.example` | API key template — copy to `.env` (gitignored) |
 | `watchlist.txt` | Tickers the voice parser prioritizes; edit each morning |
-| `tests/` | Rule-band tests, locate-cost report tests, synthetic TTS→Whisper→parse audio tests |
+| `tests/` | Rule-band tests, network allow-list tests, locate-cost report tests, synthetic TTS→Whisper→parse audio tests |
 | `samples/quotes.sample.jsonl` | Example of the quote log format |
+| `CLAUDE.md` | Claude Code session guide (imports AGENTS.md; deploy steps, money rules) |
 | `AGENTS.md` / `llms.txt` / `SPEC-locate-workflow.md` / `BUILD-PLAN.md` | Agent + contract docs |
 
 ## How to Use
@@ -115,9 +123,10 @@ make it yours.
    (`python3 src/server.py --lan`) and open `http://<trading-mac-name>.local:8765` from any
    device on your network (find the name under System Settings → General → Sharing). Approve
    the macOS firewall prompt on first run. **The mic and spoken read-back stay on the server
-   Mac** — remote devices are remote controls/monitors. ⚠ LAN mode means anyone on the
-   network can reach the console, including accept — use only on a trusted home network
-   (default remains localhost-only). Port busy? Add `--port 8766`.
+   Mac** — remote devices are remote controls/monitors. The console only answers this Mac,
+   private home-network addresses and Tailscale devices; anything else gets `403 Forbidden`,
+   and so do requests relayed from the public internet by Tailscale Funnel. Change the list
+   with `"allowed_networks"` in `config.json` (CIDR strings). Port busy? Add `--port 8766`.
 7. **Auto-start at login** (optional, recommended for a dedicated trading Mac) —
    `./install-autostart.sh --lan` installs a launchd LaunchAgent: the console starts at
    login, restarts if it crashes, and survives closed terminals. Any server flags you pass
@@ -161,6 +170,10 @@ make it yours.
 - A sell-back acknowledged on a day the console wasn't polling TradeZero has no account
   record, so it stays **sell-back pending** in the history (the cash ledger still shows the
   credit).
+- The allow-list trusts any device on a private home-network range; a guest on your Wi-Fi
+  counts as local. Narrow `allowed_networks` (e.g. `192.168.0.0/24` plus Tailscale) if needed.
+- The Funnel check relies on Tailscale's `Tailscale-Funnel-Request` header; also keep port
+  8765 out of `tailscale funnel` and router port-forwarding.
 - One-letter tickers (e.g. F, T, X) are ignored by voice and by the console's command box
   unless they are on `watchlist.txt` — they are usually Whisper mishearings.
 - Request stats show spend **before** sell-back credits; the account row shows the net, but
